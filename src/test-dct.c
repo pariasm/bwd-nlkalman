@@ -431,7 +431,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 
 	const int psz = prms.patch_sz;
 //	const int step = prms.pixelwise ? 1 : psz/2;
-	const int step = prms.pixelwise ? 1 : psz/4;
+	const int step = prms.pixelwise ? 1 : psz/2;
 	const float sigma2 = sigma * sigma;
 	const float weights_hx2  = prms.weights_hx * prms.weights_hx;
 //	const float weights_ht2  = prms.weights_ht * prms.weights_ht;
@@ -545,7 +545,6 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 
 				// normalize distance
 				ww /= (float)psz*psz*ch;
-				ww = sqrtf(ww);
 
 				// accumulate on patch statistics }}}4{{{4
 				if (ww <= weights_hx2)
@@ -668,30 +667,38 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		dct_threads_forward((float *)N1D0, dcts);
 
 		float vp = 0;
-		for (int c  = 0; c  < ch ; ++c )
-		for (int hy = 0; hy < psz; ++hy)
-		for (int hx = 0; hx < psz; ++hx)
-		if (np0 > 10)
+		if (np0 > 4)
 		{
-			// "kalman"-like filtering
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				// "kalman"-like filtering
 
-			// prediction variance (substract sigma2 from transition variance)
-			float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - sigma2);
+				// prediction variance (substract sigma2 from transition variance)
+				float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - sigma2);
 
-			// kalman gain
-			float a = v / (v + sigma2); 
-			if (a < 0) printf("a = %f v = %f ", a, v);
-			if (a > 1) printf("a = %f v = %f ", a, v);
+				// kalman gain
+				float a = v / (v + sigma2); 
+				if (a < 0) printf("a = %f v = %f ", a, v);
+				if (a > 1) printf("a = %f v = %f ", a, v);
 
-			// filter
-			N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
+				// filter
+				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
 
-			// variance of filtered patch
-			vp += (1 - a * a) * v - a * a * sigma2;
+				// variance of filtered patch
+				vp += (1 - a * a) * v - a * a * sigma2;
+			}
 		}
 		else
 		{
-			// spatial denoising using statistics in M1 V1
+			printf("n0 = %d - n1 = %d ", np0, np1);
+			// TODO: spatial denoising using statistics in M1 V1
+			// FIXME: for the moment we paint in black pixels with few neighbors
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+				N1D0[c][hy][hx] = 0;
 		}
 
 		// invert dct (output in N1D0)
@@ -746,6 +753,10 @@ static const char *const usages[] = {
 
 int main(int argc, const char *argv[])
 {
+	printf("TODO: patch distances: which is the best distance threshold?\n");
+	printf("TODO: add spatial denoising (sim. patches as "
+	       "observations of target patch)\n");
+
 	// parse command line {{{2
 
 	// command line parameters and their defaults
