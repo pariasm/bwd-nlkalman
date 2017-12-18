@@ -481,19 +481,23 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	for (int px = ox; px < w - psz + 1; px += psz) // may not be denoised
 	{
 		//	load target patch <<<3
+		bool prev_p = d0;
 		for (int hy = 0; hy < psz; ++hy)
 		for (int hx = 0; hx < psz; ++hx)
-		for (int c  = 0; c  < ch ; ++c )
 		{
-			if (d0) D0[hy][hx][c] = d0[py + hy][px + hx][c];
-			N1[hy][hx][c] = n1[py + hy][px + hx][c];
-//			D1[hy][hx][c] = 0;
+			if (prev_p && isnan(d0[py + hy][px + hx][0])) prev_p = false;
+			for (int c  = 0; c  < ch ; ++c )
+			{
+				D0[hy][hx][c] = (prev_p) ? d0[py + hy][px + hx][c] : 0.f;
+				N1[hy][hx][c] = n1[py + hy][px + hx][c];
+//				D1[hy][hx][c] = 0;
 
-			M1 [c][hy][hx] = 0.;
-			V1 [c][hy][hx] = 0.;
-			M0 [c][hy][hx] = 0.;
-			V0 [c][hy][hx] = 0.;
-			V01[c][hy][hx] = 0.;
+				M1 [c][hy][hx] = 0.;
+				V1 [c][hy][hx] = 0.;
+				M0 [c][hy][hx] = 0.;
+				V0 [c][hy][hx] = 0.;
+				V01[c][hy][hx] = 0.;
+			}
 		}
 
 		// gather spatio-temporal statistics: loop on search region <<<3
@@ -509,13 +513,15 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 			{
 				// store patch at q <<<4
 
-				// check if the previous patch is valid
-				bool prev = d0;
-				if (prev)
+				// check if the previous patch at q is valid
+				bool prev_q = d0;
+				if (prev_q)
 					for (int hy = 0; hy < psz; ++hy)
 					for (int hx = 0; hx < psz; ++hx)
-					if (prev && isnan(d0[qy + hy][qx + hx][0]))
-						prev = false;
+					if (prev_q && isnan(d0[qy + hy][qx + hx][0]))
+						prev_q = false;
+
+				const bool prev = prev_p && prev_q;
 
 				for (int c  = 0; c  < ch ; ++c )
 				for (int hy = 0; hy < psz; ++hy)
@@ -612,20 +618,12 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		{
 			// local version: single point estimate of statistics <<<4
 
-			// check if the previous patch is valid
-			bool prev = d0;
-			if (prev)
-				for (int hy = 0; hy < psz; ++hy)
-				for (int hx = 0; hx < psz; ++hx)
-				if (prev && isnan(D0[hy][hx][0]))
-					prev = false;
-
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
 			{
 				N1D0[c][hy][hx] = N1[hy][hx][c];
-				N1D0[c + ch][hy][hx] = prev ? D0[hy][hx][c] : 0;
+				N1D0[c + ch][hy][hx] = prev_p ? D0[hy][hx][c] : 0;
 			}
 
 			// compute dct (output in N1D0)
@@ -639,7 +637,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				float p = N1D0[c][hy][hx];
 				V1[c][hy][hx] = p * p;
 
-				if (prev)
+				if (prev_p)
 				{
 					p = N1D0[c + ch][hy][hx];
 					V0[c][hy][hx] = p * p;
