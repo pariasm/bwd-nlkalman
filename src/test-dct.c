@@ -684,15 +684,15 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - sigma2);
 
 				// kalman gain
-				float a = v / (v + sigma2); 
+				float a = v / (v + 4*sigma2); // FIXME: this should be a parameter
 				if (a < 0) printf("a = %f v = %f ", a, v);
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
-				// filter
-				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
-
 				// variance of filtered patch
 				vp += (1 - a * a) * v - a * a * sigma2;
+
+				// filter
+				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
 			}
 		}
 		else
