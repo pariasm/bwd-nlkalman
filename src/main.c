@@ -2,9 +2,11 @@
 #include "iio.h"        // image i/o
 
 #include <stdlib.h>
-#include <math.h>      // nans (used as boundary value by bicubic interp)
+#include <math.h>       // nans (used as boundary value by bicubic interp)
+#include <fftw3.h>      // computes dct
+#include <omp.h>
 
-// some macros and data types {{{1
+// some macros and data types <<<1
 
 //#define DUMP_INFO
 
@@ -12,13 +14,7 @@
 //#define VARIANCES
 
 // comment for uniform aggregation
-#define WEIGHTED_AGGREGATION
-
-// this enables a Kalman type of temporal recursion
-#define KALMAN_RECURSION
-
-// transition variance is estimated via temporal patch similarity
-#define AGGREGATE_TRANSITION_VAR
+//#define WEIGHTED_AGGREGATION
 
 #define max(a,b) \
 	({ __typeof__ (a) _a = (a); \
@@ -30,7 +26,7 @@
 	   __typeof__ (b) _b = (b); \
 	   _a < _b ? _a : _b; })
 
-// read/write image sequence {{{1
+// read/write image sequence <<<1
 static
 float * vio_read_video_float_vec(const char * const path, int first, int last, 
 		int *w, int *h, int *pd)
@@ -92,7 +88,7 @@ void vio_save_video_float_vec(const char * const path, float * vid,
 }
 
 
-// bicubic interpolation {{{1
+// bicubic interpolation <<<1
 
 #ifdef NAN
 // extrapolate by nan
@@ -165,7 +161,238 @@ float * warp_bicubic(float * im, float * of, int w, int h, int ch)
 	return im_w;
 } */
 
-// recursive nl-means algorithm {{{1
+// dct handler <<<1
+
+// dct implementation: using fftw or as a matrix product
+enum dct_method {FFTW, MATPROD};
+
+// struct containing the workspaces for the dcts
+struct dct_threads
+{
+	// workspaces for DCT transforms in each thread
+	fftwf_plan plan_forward [100];
+	fftwf_plan plan_backward[100];
+	float *dataspace[100];
+	float *datafreq [100];
+
+	// size of the signals
+	int width;
+	int height;
+	int frames;
+	int nsignals;
+	int nthreads;
+
+	// DCT bases for matrix product implementation 
+	// TODO
+	
+	// which implementation to use
+	enum dct_method method;
+};
+
+// init dct workspaces <<<2
+void dct_threads_init(int w, int h, int f, int n, int t, struct dct_threads * dct_t)
+{
+#ifdef _OPENMP
+	t = min(t, omp_get_max_threads());
+	if (t > 100)
+	{
+		fprintf(stderr,"Error: dct_threads is hard-coded"
+		               "for a maximum of 100 threads\n");
+		exit(1);
+	}
+#else
+	if (t > 1)
+	{
+		fprintf(stderr,"Error: dct_threads can't handle"
+		               "%d threads (no OpenMP)\n", t);
+		exit(1);
+	}
+#endif
+
+	dct_t->width = w;
+	dct_t->height = h;
+	dct_t->frames = f;
+	dct_t->nsignals = n;
+	dct_t->nthreads = t;
+
+   unsigned int N = w * h * f * n;
+
+	// define method based on patch size
+//	dct_t->method = (width * height * frames < 32) ? MATPROD : FFTW;
+	dct_t->method = FFTW;
+//	dct_t->method = MATPROD; // FIXME: MATPROD IS NOT WORKING!
+
+//	fprintf(stderr, "init DCT for %d thread - %d x %d x %d ~ %d\n",nthreads, width, height, frames, nsignals);
+
+	switch (dct_t->method)
+	{
+		case FFTW:
+
+			for (int i = 0; i < dct_t->nthreads; i++)
+			{
+				dct_t->dataspace[i] = (float*)fftwf_malloc(sizeof(float) * N);
+				dct_t->datafreq [i] = (float*)fftwf_malloc(sizeof(float) * N);
+		
+				int sz[] = {f, h, w};
+		
+				fftwf_r2r_kind dct[] = {FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10};
+				dct_t->plan_forward[i] = fftwf_plan_many_r2r(3, sz, n,
+						dct_t->dataspace[i], NULL, 1, w * h * f, 
+						dct_t->datafreq [i], NULL, 1, w * h * f,
+//						dct_t->dataspace[i], NULL, n, 1, 
+//						dct_t->datafreq [i], NULL, n, 1,
+						dct, FFTW_ESTIMATE);
+		
+				fftwf_r2r_kind idct[] = {FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01};
+				dct_t->plan_backward[i] = fftwf_plan_many_r2r(3, sz, n,
+						dct_t->datafreq [i], NULL, 1, w * h * f,
+						dct_t->dataspace[i], NULL, 1, w * h * f,
+//						dct_t->datafreq [i], NULL, n, 1,
+//						dct_t->dataspace[i], NULL, n, 1,
+						idct, FFTW_ESTIMATE);
+			}
+			break;
+			
+		case MATPROD:
+
+			fprintf(stderr, "MATPROD DCT HANDLER IS NOT YET IMPLEMENTED\n");
+			break;
+	}
+
+}
+
+// delete dct workspaces <<<2
+void dct_threads_destroy(struct dct_threads * dct_t)
+{
+	if (dct_t->nsignals)
+	{
+		for (int i = 0; i < dct_t->nthreads; i++)
+		{
+			fftwf_free(dct_t->dataspace[i]);
+			fftwf_free(dct_t->datafreq [i]);
+			fftwf_destroy_plan(dct_t->plan_forward [i]);
+			fftwf_destroy_plan(dct_t->plan_backward[i]);
+		}
+	}
+}
+
+// compute forward dcts <<<2
+void dct_threads_forward(float * patch, struct dct_threads * dct_t)
+{
+   int tid = 0;
+#ifdef _OPENMP
+   tid = omp_get_thread_num();
+#endif
+
+	int w   = dct_t->width;
+	int h   = dct_t->height;
+	int f   = dct_t->frames;
+	int n   = dct_t->nsignals;
+	int wh  = w * h;
+	int whf = wh * f;
+	int N   = whf * n;
+
+	if (N == 0)
+		fprintf(stderr, "Attempting to use an uninitialized dct_threads struct.\n");
+
+	switch (dct_t->method)
+	{
+		case MATPROD: // compute dct via separable matrix products
+
+			fprintf(stderr, "MATPROD DCT HANDLER IS NOT YET IMPLEMENTED\n");
+			break;
+
+		case FFTW: // compute dct via fftw
+		{
+			// copy and compute unnormalized dct
+			for (int i = 0; i < N; i++) dct_t->dataspace[tid][i] = patch[i];
+
+			fftwf_execute(dct_t->plan_forward[tid]);
+
+			// copy and orthonormalize
+			float norm   = 1.0/sqrt(8.0*(float)whf);
+			float isqrt2 = 1.f/sqrt(2.0);
+
+			for (int i = 0; i < N; i++) patch[i] = dct_t->datafreq[tid][i] * norm;
+
+			for (int i = 0; i < n; i++)
+			{
+				for (int t = 0; t < f; t++)
+				for (int y = 0; y < h; y++)
+					patch[i*whf + t*wh + y*w] *= isqrt2;
+
+				for (int t = 0; t < f; t++)
+				for (int x = 0; x < w; x++)
+					patch[i*whf + t*wh + x] *= isqrt2;
+
+				for (int y = 0; y < h; y++)
+				for (int x = 0; x < w; x++)
+					patch[i*whf + y*w + x] *= isqrt2;
+			}
+
+			break;
+		}
+	}
+}
+
+// compute inverse dcts <<<2
+void dct_threads_inverse(float * patch, struct dct_threads * dct_t)
+{
+	int tid = 0;
+#ifdef _OPENMP
+   tid = omp_get_thread_num();
+#endif
+
+	int w   = dct_t->width;
+	int h   = dct_t->height;
+	int f   = dct_t->frames;
+	int n   = dct_t->nsignals;
+	int wh  = w * h;
+	int whf = wh * f;
+	int N   = whf * n;
+
+	if (N == 0)
+		fprintf(stderr, "Attempting to use a uninitialized dct_threads struct.\n");
+
+	switch (dct_t->method)
+	{
+		case MATPROD: // compute dct via separable matrix products
+
+			fprintf(stderr, "MATPROD DCT HANDLER IS NOT YET IMPLEMENTED\n");
+			break;
+
+		case FFTW: // compute dct via fftw
+		{
+			// normalize
+			float norm  = 1.0/sqrt(8.0*(float)whf);
+			float sqrt2 = sqrt(2.0);
+
+			for (int i = 0; i < n; i++)
+			{
+				for (int t = 0; t < f; t++)
+				for (int y = 0; y < h; y++)
+					patch[i*whf + t*wh + y*w] *= sqrt2;
+
+				for (int t = 0; t < f; t++)
+				for (int x = 0; x < w; x++)
+					patch[i*whf + t*wh + x] *= sqrt2;
+
+				for (int y = 0; y < h; y++)
+				for (int x = 0; x < w; x++)
+					patch[i*whf + y*w + x] *= sqrt2;
+			}
+
+			for (int i = 0; i < N; i++) dct_t->datafreq[tid][i] = patch[i] * norm;
+
+			fftwf_execute(dct_t->plan_backward[tid]);
+
+			for (int i=0; i < N; i++) patch[i] = dct_t->dataspace[tid][i];
+		}
+	}
+}
+
+
+// recursive nl-means algorithm <<<1
 
 // struct for storing the parameters of the algorithm
 struct vnlmeans_params
@@ -196,399 +423,19 @@ void vnlmeans_default_params(struct vnlmeans_params * p, float sigma)
 }
 
 // denoise frame t
-void vnlmeans_kalman_frame(float *deno1, float *nisy1, float *deno0, 
-#ifdef VARIANCES
-		float *vari1, float *vari0,
-#endif
-		int w, int h, int ch, float sigma,
-		const struct vnlmeans_params prms, int frame)
-{
-	// definitions {{{2
-
-	const int psz = prms.patch_sz;
-	const int step = prms.pixelwise ? 1 : psz/2;
-	const float weights_hx2  = prms.weights_hx * prms.weights_hx;
-	const float weights_ht2  = prms.weights_ht * prms.weights_ht;
-	const float weights_htv2 = prms.weights_htv * prms.weights_htv;
-	const float sigma2 = sigma * sigma;
-
-
-	// aggregation weights (not necessary for pixel-wise nlmeans)
-	float *aggr1 = prms.pixelwise ? NULL : malloc(w*h*sizeof(float));
-
-#ifdef AGGREGATE_TRANSITION_VAR
-	/* Transition variances are estimated as a weighted average of the
-	 * transition l2 error of all patches that overlap a pixel.  In practice,
-	 * this means that we compute for all patches the squared l2 error between
-	 * the current patch and its previous version. We compute a Gaussian
-	 * similarity weight with parameter weight_hvt, and aggregate these weighted
-	 * variances on a variance image. This works as a soft min of the l2 errors
-	 * among all patches overlapping a pixel. If weight_hvt = 0 the soft min
-	 * converges to a min. */
-	float *var01 = prms.pixelwise ? NULL : malloc(w*h*sizeof(float));
-	float *agg01 = prms.pixelwise ? NULL : malloc(w*h*sizeof(float));
-	if (agg01) for (int i = 0; i < w*h; ++i) agg01[i] = 0.;
-	if (var01) for (int i = 0; i < w*h; ++i) var01[i] = 0.;
-#endif
-
-	// set output and aggregation weights to 0
-	for (int i = 0; i < w*h*ch; ++i) deno1[i] = 0.;
-	if (aggr1) for (int i = 0; i < w*h; ++i) aggr1[i] = 0.;
-
-#ifdef VARIANCES
-	// set variances to 0
-	for (int i = 0; i < w*h; ++i) vari1[i] = 0.;
-#endif
-
-	// noisy and clean patches at point p (as VLAs in the stack!)
-	float N1[psz][psz][ch]; // noisy patch at position p in frame t
-	float D1[psz][psz][ch]; // denoised patch at p in frame t (target patch)
-	float D0[psz][psz][ch]; // denoised patch at p in frame t - 1
-#if defined(WEIGHTED_AGGREGATION) || defined(VARIANCES)
-	float V1[psz][psz];     // patch variance after the spatial average
-#endif
-
-	// wrap images with nice pointers to vlas
-	float (*a1)[w]     = (void *)aggr1;       // aggregation weights at t
-	float (*d1)[w][ch] = (void *)deno1;       // denoised frame t (output)
-	const float (*d0)[w][ch] = (void *)deno0; // denoised frame t-1
-	const float (*n1)[w][ch] = (void *)nisy1; // noisy frame at t
-#ifdef VARIANCES
-	float (*v0)[w] = (void *)vari0;       // aggregation weights at t
-	float (*v1)[w] = (void *)vari1;       // aggregation weights at t
-#endif
-#ifdef AGGREGATE_TRANSITION_VAR
-	float (*a01)[w] = (void *)agg01;
-	float (*v01)[w] = (void *)var01;
-#endif
-
-	// loop on image patches {{{2
-	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
-	for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
-	{
-		//	load target patch {{{3
-		for (int hy = 0; hy < psz; ++hy)
-		for (int hx = 0; hx < psz; ++hx)
-		for (int c  = 0; c  < ch ; ++c )
-		{
-			if (d0) D0[hy][hx][c] = d0[py + hy][px + hx][c];
-			N1[hy][hx][c] = n1[py + hy][px + hx][c];
-			D1[hy][hx][c] = 0;
-		}
-
-		// spatial average: loop on search region {{{3
-		float cp = 0.; // sum of similarity weights, used for normalization
-		if (weights_hx2)
-		{
-			const int wsz = prms.search_sz;
-			const int wx[2] = {max(px - wsz, 0), min(px + wsz, w - psz) + 1};
-			const int wy[2] = {max(py - wsz, 0), min(py + wsz, h - psz) + 1};
-#ifdef TRIM_SELF_WEIGHT
-			float maxw = 0.;
-#endif
-			for (int qy = wy[0]; qy < wy[1]; ++qy)
-			for (int qx = wx[0]; qx < wx[1]; ++qx)
-#ifdef TRIM_SELF_WEIGHT
-			if (qx != px && qy != py)
-#endif
-			{
-				// compute patch distance {{{4
-				float ww = 0;
-				const float l = prms.dista_lambda;
-				for (int hy = 0; hy < psz; ++hy)
-				for (int hx = 0; hx < psz; ++hx)
-					if (d0 && l != 1 && 
-					    !isnan(d0[qy + hy][qx + hx][0]) && !isnan(D0[hy][hx][0]))
-						// use noisy and denoised patches from previous frame
-						for (int c  = 0; c  < ch ; ++c )
-						{
-							const float eN1 = n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
-							const float eD0 = d0[qy + hy][qx + hx][c] - D0[hy][hx][c];
-							ww += l * eN1 * eN1 + (1 - l) * eD0 * eD0;
-//							ww += l * max(eN1*eN1 - 2*sigma2, 0.) + (1 - l) * eD0*eD0;
-						}
-					else
-						// use only noisy from previous frame
-						for (int c  = 0; c  < ch ; ++c )
-						{
-							const float eN1 = n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
-//							ww += max(eN1 * eN1 - 2*sigma2, 0.);
-							ww += eN1 * eN1;
-						}
-	
-				// compute similarity weight }}}4{{{4
-				if (weights_hx2)
-					ww = expf(-1 / weights_hx2 * ww / (float)(psz*psz));
-//					ww = (ww / (float)(psz*psz*ch)) < weights_hx2;
-//					ww = 1.;
-				else
-					ww = (qx == px && qy == py) ? 1. : 0.;
-
-#ifdef TRIM_SELF_WEIGHT
-				maxw = max(ww, maxw);
-#endif
-				// accumulate on output patch }}}4{{{4
-				if (ww > prms.weights_thx)
-				{
-					cp += ww;
-					for (int hy = 0; hy < psz; ++hy)
-					for (int hx = 0; hx < psz; ++hx)
-					for (int c  = 0; c  < ch ; ++c )
-						D1[hy][hx][c] += n1[qy + hy][qx + hx][c] * ww;
-				}// }}}4
-			}
-#ifdef TRIM_SELF_WEIGHT
-			// accumulate the central patch using maxw
-			maxw = (maxw > 1e-3) ? maxw : 1.;
-			cp += maxw;
-			for (int hy = 0; hy < psz; ++hy)
-			for (int hx = 0; hx < psz; ++hx)
-			for (int c  = 0; c  < ch ; ++c )
-				D1[hy][hx][c] += n1[py + hy][px + hx][c] * maxw;
-#endif
-		}
-		else
-		{
-			// copy noisy patch to output
-			cp = 1.;
-			for (int hy = 0; hy < psz; ++hy)
-			for (int hx = 0; hx < psz; ++hx)
-			for (int c  = 0; c  < ch ; ++c )
-				D1[hy][hx][c] = n1[py + hy][px + hx][c];
-		}
-		
-		// normalize spatial average {{{3
-		float icp = 1. / max(cp, 1e-6);
-		for (int hy = 0; hy < psz; ++hy)
-		for (int hx = 0; hx < psz; ++hx)
-		for (int c  = 0; c  < ch ; ++c )
-			D1[hy][hx][c] *= icp;
-
-#if defined(WEIGHTED_AGGREGATION) || defined(VARIANCES)
-		// TODO: it is unnecessary to have a patch V1 of variances
-		// variance of D1
-		float vp = sigma2 / cp;
-		for (int hy = 0; hy < psz; ++hy)
-		for (int hx = 0; hx < psz; ++hx)
-			V1[hy][hx] = vp;
-#endif
-
-		// compute transition variance {{{3
-#ifdef AGGREGATE_TRANSITION_VAR
-		float tvp = 0.; // transition variance of patch p
-		float twp = 0.; // associated similarity weight
-		if (d0)
-		{
-			int n = 0; // count valid pixels
-			const float l01 = prms.tv_lambda;
-			for (int hy = 0; hy < psz; ++hy)
-			for (int hx = 0; hx < psz; ++hx)
-				if (!isnan(D0[hy][hx][0]))
-				{
-					for (int c  = 0; c  < ch; ++c)
-					{
-						/* NOTE: the computation of the error between d0 and the spatially
-						 * denoised d1 could (and should?) be done after spatial aggregation.
-						 * That requires a local loop with a patch kernel to compute all 
-						 * patch transition errors. A simpler alternative is to just compute
-						 * the pixel-wise error between d0 and the aggregated d1. */
-						const float eD = D1[hy][hx][c] - D0[hy][hx][c];
-						const float eN = N1[hy][hx][c] - D0[hy][hx][c];
-						tvp += l01 * max(eN * eN - sigma2, 0.f) + (1 - l01) * eD * eD;
-					}
-					n++;
-				}
-
-			// normalize variance estimate
-			tvp /= (float)(n*ch);
-
-			// compute similarity weight
-			if (weights_htv2 && n)
-				twp = expf(-1 / weights_htv2 * tvp );
-			else
-				twp = 0;
-		}
-#endif
-
-		// aggregate denoised patch on output image {{{3
-		if (a1)
-			// patch-wise denoising: aggregate the whole denoised patch
-			for (int hy = 0; hy < psz; ++hy)
-			for (int hx = 0; hx < psz; ++hx)
-			{
-#ifdef WEIGHTED_AGGREGATION
-				// weighted aggregation by inverse variance
-				const float ww = 1.f/V1[hy][hx];
-#else
-				// uniform aggregation
-				const float ww = 1.f;
-#endif
-				// aggregation weights and denoised image
-				a1[py + hy][px + hx] += ww;
-				for (int c = 0; c < ch ; ++c )
-					d1[py + hy][px + hx][c] += D1[hy][hx][c] * ww;
-
-#ifdef VARIANCES
-				// aggregate variances as well
-				v1[py + hy][px + hx] += ww * ww * V1[hy][hx];
-#endif
-
-#ifdef AGGREGATE_TRANSITION_VAR
-				if (weights_htv2)
-				{
-					// aggregate on v01 as a soft-min
-					a01[py + hy][px + hx] += twp;
-					v01[py + hy][px + hx] += twp * tvp;
-				}
-				else
-				{
-					// aggregate on v01 as a hard-min
-					if (a01[py + hy][px + hx])
-						v01[py + hy][px + hx] = min(v01[py + hy][px + hx], tvp);
-					else
-					{
-						a01[py + hy][px + hx] = 1.;
-						v01[py + hy][px + hx] = tvp;
-					}
-				}
-#endif
-			}
-		else 
-		{
-			// pixel-wise denoising: aggregate only the central pixel
-			for (int c = 0; c < ch ; ++c )
-				d1[py + psz/2][px + psz/2][c] += D1[psz/2][psz/2][c];
-#ifdef VARIANCES
-			v1[py + psz/2][px + psz/2] = vp * vp;
-#endif
-		}
-		// }}}3
-	}
-
-	// normalize spatial output {{{2
-	if (aggr1)
-	for (int i = 0, j = 0; i < w*h; ++i) 
-	for (int c = 0; c < ch ; ++c, ++j) 
-		deno1[j] /= aggr1[i];
-
-#ifdef VARIANCES
-	if (aggr1)
-	for (int i = 0; i < w*h; ++i) 
-		vari1[i] /= aggr1[i] * aggr1[i];
-#endif
-
-#ifdef DUMP_INFO
-	if (d0)
-	{
-		char name[512];
-		sprintf(name, "dump/vari1.%03d.tif",frame);
-		iio_save_image_float_vec(name, vari1, w, h, 1);
-
-//	#ifdef AGGREGATE_TRANSITION_VAR
-//		sprintf(name, "dump/var01.%03d.tif",frame);
-//		iio_save_image_float_vec(name, var01, w, h, 1);
-//	#endif
-	}
-#endif
-
-	// temporal average with previous denoised image {{{2
-	if (d0)
-	{
-		for (int y = 0; y < h; ++y)
-		for (int x = 0; x < w; ++x)
-		if (!isnan(d0[y][x][0]))
-		{
-#ifdef AGGREGATE_TRANSITION_VAR
-			// transition variance computed by aggregation
-			const float v01xy = v01[y][x] / (a01 ? a01[y][x] : 1.);
-#else
-			// estimate transition variance as (d0 - d1)^2
-			float v01xy = 0.;
-			for (int c = 0; c < ch; ++c) 
-			{
-				const float e = d0[y][x][c] - d1[y][x][c];
-				v01xy += e * e / (float)ch;
-			}
-#endif
-			// compute variance multiplier
-			const float w01xy = min(1, max(0, exp( - 1./weights_ht2 * v01xy )));
-
-#ifdef VARIANCES 
-			// compute coefficient in convex combination
-			const float v0xy = max(v0[y][x], 1e-2);
-			const float f = min(1, max(0, v0xy / (v0xy + v1[y][x] * w01xy)));
-			
-			// update pixel variance
-			v1[y][x] = max(0.f, v0xy * v1[y][x] / max(v0xy + v1[y][x] * w01xy, 1e-4));
-#else
-//			// no variances: we assume that v0 = v1
-//			const float f = min(1., max(0., 1./(1. + w01xy)));
-			// no variances: we assume that v0 = (1 - w01)v1
-			const float f = 1. - w01xy;
-#endif
-
-			// update pixel value
-			for (int c = 0; c < ch; ++c)
-				d1[y][x][c] = d0[y][x][c] * (1 - f) + d1[y][x][c] * f;
-
-#ifdef DUMP_INFO
-			v01[y][x] = w01xy;
-			v0[y][x] = f;
-#endif
-		}
-		else
-		{
-#ifdef DUMP_INFO
-			v01[y][x] = 0.;
-			v0[y][x] = 1.;
-#endif
-		}
-	}
-
-#ifdef DUMP_INFO
-	if (d0)
-	{
-		char name[512];
-		sprintf(name, "dump/f.%03d.tif",frame);
-		iio_save_image_float_vec(name, vari0, w, h, 1);
-
-	#ifdef AGGREGATE_TRANSITION_VAR
-		sprintf(name, "dump/w.%03d.tif",frame);
-		iio_save_image_float_vec(name, var01, w, h, 1);
-	#endif
-	}
-#endif
-
-#ifdef AGGREGATE_TRANSITION_VAR
-//	// for visualization: copy to vari1
-//	for (int i = 0; i < w*h; ++i)
-//		vari1[i] = var01[i];
-#endif
-
-	// free allocated mem and quit
-	if (aggr1) free(aggr1);
-#ifdef AGGREGATE_TRANSITION_VAR
-	if (var01) free(var01);
-	if (agg01) free(agg01);
-#endif
-	return; // }}}2
-}
-
-// denoise frame t
 void vnlmeans_frame(float *deno1, float *nisy1, float *deno0, 
-#ifdef VARIANCES
-		float *vari1, float *vari0,
-#endif
 		int w, int h, int ch, float sigma,
 		const struct vnlmeans_params prms)
 {
-	// definitions {{{2
+	// definitions <<<2
 
 	const int psz = prms.patch_sz;
 	const int step = prms.pixelwise ? 1 : psz/2;
+//	const int step = prms.pixelwise ? 1 : psz;
+	const float sigma2 = sigma * sigma;
 	const float weights_hx2  = prms.weights_hx * prms.weights_hx;
-	const float weights_ht2  = prms.weights_ht * prms.weights_ht;
-	const float weights_htv2 = prms.weights_htv * prms.weights_htv;
+//	const float weights_ht2  = prms.weights_ht * prms.weights_ht;
+//	const float weights_htv2 = prms.weights_htv * prms.weights_htv;
 
 	// aggregation weights (not necessary for pixel-wise nlmeans)
 	float *aggr1 = prms.pixelwise ? NULL : malloc(w*h*sizeof(float));
@@ -597,44 +444,65 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	for (int i = 0; i < w*h*ch; ++i) deno1[i] = 0.;
 	if (aggr1) for (int i = 0; i < w*h; ++i) aggr1[i] = 0.;
 
-#ifdef VARIANCES
-	// set variances to 0
-	for (int i = 0; i < w*h; ++i) vari1[i] = 0.;
-#endif
-
 	// noisy and clean patches at point p (as VLAs in the stack!)
 	float N1[psz][psz][ch]; // noisy patch at position p in frame t
-	float D1[psz][psz][ch]; // denoised patch at p in frame t (target patch)
+//	float D1[psz][psz][ch]; // denoised patch at p in frame t (target patch)
 	float D0[psz][psz][ch]; // denoised patch at p in frame t - 1
-#ifdef VARIANCES
-	float V1[psz][psz];     // patch variance after the spatial average
-#endif
 
 	// wrap images with nice pointers to vlas
 	float (*a1)[w]     = (void *)aggr1;       // aggregation weights at t
 	float (*d1)[w][ch] = (void *)deno1;       // denoised frame t (output)
 	const float (*d0)[w][ch] = (void *)deno0; // denoised frame t-1
 	const float (*n1)[w][ch] = (void *)nisy1; // noisy frame at t
-#ifdef VARIANCES
-	float (*v1)[w]     = (void *)vari1;       // aggregation weights at t
-#endif
 
-	// loop on image patches {{{2
-	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
-	for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
+	// initialize dct workspaces (we will compute the dct of two patches)
+	float N1D0[2*ch][psz][psz]; // noisy patch at t and clean patch at t-1
+	struct dct_threads dcts[1];
+#ifdef _OPENMP
+	const int nthreads = omp_get_max_threads();
+#else
+	const int nthreads = 1;
+#endif
+	dct_threads_init(psz, psz, 1, 2*ch, nthreads, dcts); // 2D DCT
+//	dct_threads_init(psz, psz, 2, 1*ch, nthreads, dcts); // 3D DCT
+
+	// statistics
+	float M0 [ch][psz][psz]; // average patch at t-1
+	float V0 [ch][psz][psz]; // variance at t-1
+	float V01[ch][psz][psz]; // transition variance from t-1 to t
+	float M1 [ch][psz][psz]; // average patch at t
+	float V1 [ch][psz][psz]; // variance at t
+
+	// loop on image patches <<<2
+	for (int oy = 0; oy < psz; oy += step) // FIXME: boundary pixels
+	for (int ox = 0; ox < psz; ox += step) // FIXME: boundary pixels
+	#pragma omp parallel for private(N1D0,N1,D0,M0,V0,V01,M1,V1)
+	for (int py = oy; py < h - psz + 1; py += psz) // FIXME: boundary pixels
+	for (int px = ox; px < w - psz + 1; px += psz) // may not be denoised
 	{
-		//	load target patch {{{3
+		//	load target patch <<<3
+		bool prev_p = d0;
 		for (int hy = 0; hy < psz; ++hy)
 		for (int hx = 0; hx < psz; ++hx)
-		for (int c  = 0; c  < ch ; ++c )
 		{
-			if (d0) D0[hy][hx][c] = d0[py + hy][px + hx][c];
-			N1[hy][hx][c] = n1[py + hy][px + hx][c];
-			D1[hy][hx][c] = 0;
+			if (prev_p && isnan(d0[py + hy][px + hx][0])) prev_p = false;
+			for (int c  = 0; c  < ch ; ++c )
+			{
+				D0[hy][hx][c] = (prev_p) ? d0[py + hy][px + hx][c] : 0.f;
+				N1[hy][hx][c] = n1[py + hy][px + hx][c];
+//				D1[hy][hx][c] = 0;
+
+				M1 [c][hy][hx] = 0.;
+				V1 [c][hy][hx] = 0.;
+				M0 [c][hy][hx] = 0.;
+				V0 [c][hy][hx] = 0.;
+				V01[c][hy][hx] = 0.;
+			}
 		}
 
-		// spatial average: loop on search region {{{3
-		float cp = 0.; // sum of all weights (for normalization)
+		// gather spatio-temporal statistics: loop on search region <<<3
+		int np0 = 0; // number of similar patches with valid previous patch
+		int np1 = 0; // number of similar patches w/out valid previous patch
 		if (weights_hx2)
 		{
 			const int wsz = prms.search_sz;
@@ -643,155 +511,268 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 			for (int qy = wy[0]; qy < wy[1]; ++qy)
 			for (int qx = wx[0]; qx < wx[1]; ++qx)
 			{
-				// compute patch distance {{{4
+				// store patch at q <<<4
+
+				// check if the previous patch at q is valid
+				bool prev_q = d0;
+				if (prev_q)
+					for (int hy = 0; hy < psz; ++hy)
+					for (int hx = 0; hx < psz; ++hx)
+					if (prev_q && isnan(d0[qy + hy][qx + hx][0]))
+						prev_q = false;
+
+				const bool prev = prev_p && prev_q;
+
+				for (int c  = 0; c  < ch ; ++c )
+				for (int hy = 0; hy < psz; ++hy)
+				for (int hx = 0; hx < psz; ++hx)
+				{
+					N1D0[c][hy][hx] = n1[qy + hy][qx + hx][c];
+					N1D0[c + ch][hy][hx] = prev ? d0[qy + hy][qx + hx][c] : 0;
+				}
+
+				// compute patch distance <<<4
 				float ww = 0; // patch distance is saved here
 				const float l = prms.dista_lambda;
 				for (int hy = 0; hy < psz; ++hy)
 				for (int hx = 0; hx < psz; ++hx)
-					if (d0 && l != 1 && 
-					    !isnan(d0[qy + hy][qx + hx][0]) && !isnan(D0[hy][hx][0]))
+					if (prev && l != 1)
 						// use noisy and denoised patches from previous frame
 						for (int c  = 0; c  < ch ; ++c )
 						{
-							const float e1 = n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
-							const float e0 = d0[qy + hy][qx + hx][c] - D0[hy][hx][c];
-							ww += l * e1 * e1 + (1 - l) * e0 * e0;
+							const float e1 = N1D0[c     ][hy][hx] - N1[hy][hx][c];
+							const float e0 = N1D0[c + ch][hy][hx] - D0[hy][hx][c];
+							ww += l * max(e1 * e1 - 2*sigma2,0) + (1 - l) * e0 * e0;
 						}
 					else
-						// use only noisy from previous frame
+					{
+						// use only noisy from current frame
 						for (int c  = 0; c  < ch ; ++c )
 						{
-							const float e1 = n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
-							ww += e1 * e1;
+							const float e1 = N1D0[c][hy][hx] - N1[hy][hx][c];
+							ww += max(e1 * e1 - 2*sigma2, 0);
 						}
-	
-				// compute similarity weight }}}4{{{4
-				if (weights_hx2)
-					ww = expf(-1 / weights_hx2 * ww / (float)(psz*psz));
-				else
-					ww = (qx == px && qy == py) ? 1. : 0.;
-	
-				// accumulate on output patch }}}4{{{4
-				if (ww > prms.weights_thx)
+					}
+
+				// normalize distance
+				ww /= (float)psz*psz*ch;
+
+				// accumulate on patch statistics >>>4<<<4
+				if (ww <= weights_hx2)
 				{
-					cp += ww;
+					np1++;
+					np0 += prev ? 1 : 0;
+
+					// compute dct (output in N1D0)
+					dct_threads_forward((float *)N1D0, dcts);
+
+					// compute means and variances.
+					// to compute the variances in a single pass over the search
+					// region we use Welford's method.
+					const float inp0 = prev ? 1./(float)np0 : 0;
+					const float inp1 = 1./(float)np1;
+					for (int c  = 0; c  < ch ; ++c )
 					for (int hy = 0; hy < psz; ++hy)
 					for (int hx = 0; hx < psz; ++hx)
-					for (int c  = 0; c  < ch ; ++c )
-						D1[hy][hx][c] += n1[qy + hy][qx + hx][c] * ww;
-				}// }}}4
+					{
+						const float p = N1D0[c][hy][hx];
+						const float oldM1 = M1[c][hy][hx];
+						const float delta = p - oldM1;
+
+						M1[c][hy][hx] += delta * inp1;
+						V1[c][hy][hx] += delta * (p - M1[c][hy][hx]); 
+
+						if(prev)
+						{
+							float p = N1D0[c + ch][hy][hx];
+							const float oldM0 = M0[c][hy][hx];
+							const float delta = p - oldM0;
+
+							M0[c][hy][hx] += delta * inp0;
+							V0[c][hy][hx] += delta * (p - M0[c][hy][hx]);
+
+							p -= N1D0[c][hy][hx];
+							V01[c][hy][hx] += p*p;
+						}
+					}
+				} // >>>4
+			}
+
+			// correct variance <<<4
+			const float inp0 = np0 ? 1./(float)np0 : 0;
+			const float inp1 = 1./(float)np1;
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				V1[c][hy][hx] *= inp1;
+				if(np0)
+				{
+					V0 [c][hy][hx] *= inp0;
+					V01[c][hy][hx] *= inp0;
+				}
+			}
+			// >>>4
+		}
+		else
+		{
+			// local version: single point estimate of statistics <<<4
+
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				N1D0[c][hy][hx] = N1[hy][hx][c];
+				N1D0[c + ch][hy][hx] = prev_p ? D0[hy][hx][c] : 0;
+			}
+
+			// compute dct (output in N1D0)
+			dct_threads_forward((float *)N1D0, dcts);
+
+			// patch statistics (point estimate)
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				float p = N1D0[c][hy][hx];
+				V1[c][hy][hx] = p * p;
+
+				if (prev_p)
+				{
+					p = N1D0[c + ch][hy][hx];
+					V0[c][hy][hx] = p * p;
+
+					p -= N1D0[c + ch][hy][hx];
+					V01[c][hy][hx] = p * p;
+				}
+			}//>>>4
+		}
+
+		// filter current patch <<<3
+
+		// check if the previous patch is valid
+		bool prev = d0;
+		if (prev)
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			if (prev && isnan(D0[hy][hx][0]))
+				prev = false;
+		
+		for (int c  = 0; c  < ch ; ++c )
+		for (int hy = 0; hy < psz; ++hy)
+		for (int hx = 0; hx < psz; ++hx)
+		{
+			N1D0[c][hy][hx] = N1[hy][hx][c];
+			N1D0[c + ch][hy][hx] = prev ? D0[hy][hx][c] : 0;
+		}
+
+		// compute dct (output in N1D0)
+		dct_threads_forward((float *)N1D0, dcts);
+
+		float vp = 0;
+		if (np0 > 4)
+		{
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				// "kalman"-like filtering
+
+				// prediction variance (substract sigma2 from transition variance)
+				float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - sigma2);
+
+				// kalman gain
+				float a = v / (v + 4*sigma2); // FIXME: this should be a parameter
+				if (a < 0) printf("a = %f v = %f ", a, v);
+				if (a > 1) printf("a = %f v = %f ", a, v);
+
+				// variance of filtered patch
+				vp += (1 - a * a) * v - a * a * sigma2;
+
+				// filter
+				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
 			}
 		}
 		else
 		{
-			// copy noisy patch to output
-			cp = 1.;
-			for (int hy = 0; hy < psz; ++hy)
-			for (int hx = 0; hx < psz; ++hx)
+			// spatial nl-dct using statistics in M1 V1
+
 			for (int c  = 0; c  < ch ; ++c )
-				D1[hy][hx][c] = n1[py + hy][px + hx][c];
-		}
-		
-		// normalize spatial average {{{3
-		float icp = 1. / max(cp, 1e-6);
-		for (int hy = 0; hy < psz; ++hy)
-		for (int hx = 0; hx < psz; ++hx)
-		for (int c  = 0; c  < ch ; ++c )
-			D1[hy][hx][c] *= icp;
-
-#ifdef VARIANCES
-		// TODO: it is unnecessary to have a patch V1 of variances
-		// variance of D1
-		float vp = sigma * sigma / cp;
-		for (int hy = 0; hy < psz; ++hy)
-		for (int hx = 0; hx < psz; ++hx)
-			V1[hy][hx] = vp;
-#endif
-
-		// temporal average with denoised patch at t-1 {{{3
-		if (d0)
-		{
-			// estimate transition error
-			float iv = 0., n = 0.;
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
-			if (!isnan(D0[hy][hx][0]))
 			{
-				n ++;
-				for (int c  = 0; c  < ch ; ++c )
-				{
-					const float d = D1[hy][hx][c] - D0[hy][hx][c];
-					iv += d * d;
-				}
-			}
-			// normalize and invert
-			iv = n*(float)ch / iv * weights_ht2;
+				// prediction variance (substract sigma2 from transition variance)
+				float v = max(0.f, V1[c][hy][hx] - sigma2);
 
-			// temporal average
-			for (int hy = 0; hy < psz; ++hy)
-			for (int hx = 0; hx < psz; ++hx)
-			if (!isnan(D0[hy][hx][0]))
-			{
-				const float v = iv / (iv + icp);
-				for (int c  = 0; c  < ch ; ++c )
-					D1[hy][hx][c] = (1 - v) * D1[hy][hx][c] + v * D0[hy][hx][c];
+				// wiener filter
+				float a = v / (v + sigma2);
+				if (a < 0) printf("a = %f v = %f ", a, v);
+				if (a > 1) printf("a = %f v = %f ", a, v);
+
+				// filter
+				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*M1[c][hy][hx];
+
+				// variance of filtered patch
+				vp += a * a * v;
+
+//				vp += 1;
+//
+//				float a = (hy != 0 || hx != 0) ?// 0 : 1;
+//					(N1D0[c][hy][hx] * N1D0[c][hy][hx] > 3 * sigma2) : 1;
+//
+//				// filter
+//				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
 			}
+
+//			// FIXME: for the moment we paint in black pixels with few neighbors
+//			for (int c  = 0; c  < ch ; ++c )
+//			for (int hy = 0; hy < psz; ++hy)
+//			for (int hx = 0; hx < psz; ++hx)
+//				N1D0[c][hy][hx] = 0;
 		}
 
-		// aggregate denoised patch on output image {{{3
+		// invert dct (output in N1D0)
+		dct_threads_inverse((float *)N1D0, dcts);
+
+		// aggregate denoised patch on output image <<<3
 		if (a1)
+		{
+#ifdef WEIGHTED_AGGREGATION
+			const float w = 1.f/vp;
+#else
+			const float w = 1.f;
+#endif
 			// patch-wise denoising: aggregate the whole denoised patch
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
 			{
-#ifdef VARIANCES
-				// weighted aggregation by variance
-	#ifdef WEIGHTED_AGGREGATION
-				const float w = 1.f/V1[hy][hx];
-	#else
-				const float w = 1.f;
-	#endif
 				a1[py + hy][px + hx] += w;
 				for (int c = 0; c < ch ; ++c )
-					d1[py + hy][px + hx][c] += D1[hy][hx][c] * w;
-				v1[py + hy][px + hx] += w * w * V1[hy][hx];
-#else
-				a1[py + hy][px + hx]++;
-				for (int c = 0; c < ch ; ++c )
-					d1[py + hy][px + hx][c] += D1[hy][hx][c];
-#endif
+					d1[py + hy][px + hx][c] += w * N1D0[c][hy][hx];
 			}
+		}
 		else 
-		{
-#ifdef VARIANCES
-			v1[py + psz/2][px + psz/2] = vp * vp;
-#endif
 			// pixel-wise denoising: aggregate only the central pixel
 			for (int c = 0; c < ch ; ++c )
-				d1[py + psz/2][px + psz/2][c] += D1[psz/2][psz/2][c];
-		}
+				d1[py + psz/2][px + psz/2][c] += N1D0[c][psz/2][psz/2];
 
-		// }}}3
+		// >>>3
 	}
 
-	// normalize output {{{2
+	// normalize output <<<2
 	if (aggr1)
 	for (int i = 0, j = 0; i < w*h; ++i) 
 	for (int c = 0; c < ch ; ++c, ++j) 
 		deno1[j] /= aggr1[i];
 
-#ifdef VARIANCES
-	if (aggr1)
-	for (int i = 0; i < w*h; ++i) 
-		vari1[i] /= aggr1[i] * aggr1[i];
-#endif
-
 	// free allocated mem and quit
+	dct_threads_destroy(dcts);
 	if (aggr1) free(aggr1);
-	return; // }}}2
+
+	return; // >>>2
 }
 
-// main funcion {{{1
+// main funcion <<<1
 
 // 'usage' message in the command line
 static const char *const usages[] = {
@@ -802,7 +783,7 @@ static const char *const usages[] = {
 
 int main(int argc, const char *argv[])
 {
-	// parse command line {{{2
+	// parse command line <<<2
 
 	// command line parameters and their defaults
 	const char *nisy_path = NULL;
@@ -876,12 +857,9 @@ int main(int argc, const char *argv[])
 #ifdef WEIGHTED_AGGREGATION
 		printf("\tWEIGHTED_AGGREGATION ON\n");
 #endif
-#ifdef AGGREGATE_TRANSITION_VAR
-		printf("\tAGGREGATE_TRANSITION_VAR ON\n");
-#endif
 	}
 
-	// load data {{{2
+	// load data <<<2
 	if (verbose) printf("loading video %s\n", nisy_path);
 	int w, h, c; //, frames = lframe - fframe + 1;
 	float * nisy = vio_read_video_float_vec(nisy_path, fframe, lframe, &w, &h, &c);
@@ -913,7 +891,7 @@ int main(int argc, const char *argv[])
 		}
 	}
 
-	// run denoiser {{{2
+	// run denoiser <<<2
 	const int whc = w*h*c, wh2 = w*h*2;
 	float * deno = nisy;
 	float * warp0 = malloc(whc*sizeof(float));
@@ -948,28 +926,11 @@ int main(int argc, const char *argv[])
 		// run denoising
 		float *nisy1 = nisy + (f - fframe)*whc;
 		float *deno0 = (f > fframe) ? warp0 : NULL;
-#ifndef KALMAN_RECURSION
 		vnlmeans_frame(deno1, nisy1, deno0, w, h, c, sigma, prms);
-#else
-	#ifdef VARIANCES
-		vnlmeans_kalman_frame(deno1, nisy1, deno0, vari1, vari0, w, h, c, sigma, prms, f);
-	#else
-		vnlmeans_kalman_frame(deno1, nisy1, deno0, w, h, c, sigma, prms, f);
-	#endif
-
-	#ifdef DUMP_INFO
-		// write variances image
-		char name[512];
-		sprintf(name, "dump/var.%03d.tif", f);
-		iio_save_image_float_vec(name, vari1, w, h, 1);
-//		for (int i = 0; i < w*h; ++i) warp0[i] = sqrtf(vari1[i]);
-//		iio_save_image_float_vec(name, warp0, w, h, 1);
-	#endif
-#endif
 		memcpy(nisy1, deno1, whc*sizeof(float));
 	}
 
-	// save output {{{2
+	// save output <<<2
 	vio_save_video_float_vec(deno_path, deno, fframe, lframe, w, h, c);
 
 	if (deno1) free(deno1);
@@ -981,7 +942,7 @@ int main(int argc, const char *argv[])
 	if (nisy) free(nisy);
 	if (flow) free(flow);
 
-	return EXIT_SUCCESS; // }}}2
+	return EXIT_SUCCESS; // >>>2
 }
 
-// vim:set foldmethod=marker:
+// vim:set foldmethod=marker:set foldmarker <<<,>>>

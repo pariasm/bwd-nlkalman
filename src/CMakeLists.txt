@@ -14,9 +14,7 @@ include_directories(${ARGPARSE_INCLUDE_DIR})
 include_directories(${IIO_INCLUDE_DIR})
 
 add_executable(nlkalman-bwd main.c)
-add_executable(test-dct test-dct.c)
 
 link_directories(${CMAKE_BINARY_DIR}/lib)
-target_link_libraries(nlkalman-bwd iio argparse)
-target_link_libraries(test-dct iio argparse ${FFTWF_LIBRARIES})
+target_link_libraries(nlkalman-bwd iio argparse ${FFTWF_LIBRARIES})
 

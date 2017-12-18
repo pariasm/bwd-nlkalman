@@ -89,7 +89,7 @@ cp $(printf $OUT"/%03d_b.flo" $((FFR+1))) $(printf $OUT"/%03d_b.flo" $FFR)
 # done
 
 # run denoising {{{1
-$DIR/test-dct \
+$DIR/nlkalman-bwd \
  -i $OUT"/%03d.tif" -o $OUT"/%03d_b.flo" -f $FFR -l $LFR -s $SIG \
  -d $OUT"/deno_%03d.tif" $PRM
 
