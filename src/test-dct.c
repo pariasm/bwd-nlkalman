@@ -430,8 +430,8 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	// definitions <<<2
 
 	const int psz = prms.patch_sz;
-//	const int step = prms.pixelwise ? 1 : psz/2;
 	const int step = prms.pixelwise ? 1 : psz/2;
+//	const int step = prms.pixelwise ? 1 : psz;
 	const float sigma2 = sigma * sigma;
 	const float weights_hx2  = prms.weights_hx * prms.weights_hx;
 //	const float weights_ht2  = prms.weights_ht * prms.weights_ht;
@@ -458,8 +458,13 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	// initialize dct workspaces (we will compute the dct of two patches)
 	float N1D0[2*ch][psz][psz]; // noisy patch at t and clean patch at t-1
 	struct dct_threads dcts[1];
-	dct_threads_init(psz, psz, 1, 2*ch, 1, dcts); // 2D DCT
-//	dct_threads_init(psz, psz, 2, 1*ch, 1, dcts); // 3D DCT
+#ifdef _OPENMP
+	const int nthreads = omp_get_max_threads();
+#else
+	const int nthreads = 1;
+#endif
+	dct_threads_init(psz, psz, 1, 2*ch, nthreads, dcts); // 2D DCT
+//	dct_threads_init(psz, psz, 2, 1*ch, nthreads, dcts); // 3D DCT
 
 	// statistics
 	float M0 [ch][psz][psz]; // average patch at t-1
@@ -468,9 +473,12 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	float M1 [ch][psz][psz]; // average patch at t
 	float V1 [ch][psz][psz]; // variance at t
 
-	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
-	for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
 	// loop on image patches <<<2
+	for (int oy = 0; oy < psz; oy += step) // FIXME: boundary pixels
+	for (int ox = 0; ox < psz; ox += step) // FIXME: boundary pixels
+	#pragma omp parallel for private(N1D0,N1,D0,M0,V0,V01,M1,V1)
+	for (int py = oy; py < h - psz + 1; py += psz) // FIXME: boundary pixels
+	for (int px = ox; px < w - psz + 1; px += psz) // may not be denoised
 	{
 		//	load target patch <<<3
 		for (int hy = 0; hy < psz; ++hy)
