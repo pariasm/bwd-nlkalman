@@ -6,7 +6,7 @@
 #include <fftw3.h>      // computes dct
 #include <omp.h>
 
-// some macros and data types {{{1
+// some macros and data types <<<1
 
 //#define DUMP_INFO
 
@@ -26,7 +26,7 @@
 	   __typeof__ (b) _b = (b); \
 	   _a < _b ? _a : _b; })
 
-// read/write image sequence {{{1
+// read/write image sequence <<<1
 static
 float * vio_read_video_float_vec(const char * const path, int first, int last, 
 		int *w, int *h, int *pd)
@@ -88,7 +88,7 @@ void vio_save_video_float_vec(const char * const path, float * vid,
 }
 
 
-// bicubic interpolation {{{1
+// bicubic interpolation <<<1
 
 #ifdef NAN
 // extrapolate by nan
@@ -161,7 +161,7 @@ float * warp_bicubic(float * im, float * of, int w, int h, int ch)
 	return im_w;
 } */
 
-// dct handler {{{1
+// dct handler <<<1
 
 // dct implementation: using fftw or as a matrix product
 enum dct_method {FFTW, MATPROD};
@@ -189,10 +189,10 @@ struct dct_threads
 	enum dct_method method;
 };
 
-// init dct workspaces {{{2
+// init dct workspaces <<<2
 void dct_threads_init(int w, int h, int f, int n, int t, struct dct_threads * dct_t)
 {
-#ifdef _OPENMP 
+#ifdef _OPENMP
 	t = min(t, omp_get_max_threads());
 	if (t > 100)
 	{
@@ -261,7 +261,7 @@ void dct_threads_init(int w, int h, int f, int n, int t, struct dct_threads * dc
 
 }
 
-// delete dct workspaces {{{2
+// delete dct workspaces <<<2
 void dct_threads_destroy(struct dct_threads * dct_t)
 {
 	if (dct_t->nsignals)
@@ -276,11 +276,11 @@ void dct_threads_destroy(struct dct_threads * dct_t)
 	}
 }
 
-// compute forward dcts {{{2
+// compute forward dcts <<<2
 void dct_threads_forward(float * patch, struct dct_threads * dct_t)
 {
    int tid = 0;
-#ifdef _OPENMP 
+#ifdef _OPENMP
    tid = omp_get_thread_num();
 #endif
 
@@ -335,11 +335,11 @@ void dct_threads_forward(float * patch, struct dct_threads * dct_t)
 	}
 }
 
-// compute inverse dcts {{{2
+// compute inverse dcts <<<2
 void dct_threads_inverse(float * patch, struct dct_threads * dct_t)
 {
 	int tid = 0;
-#ifdef _OPENMP 
+#ifdef _OPENMP
    tid = omp_get_thread_num();
 #endif
 
@@ -392,7 +392,7 @@ void dct_threads_inverse(float * patch, struct dct_threads * dct_t)
 }
 
 
-// recursive nl-means algorithm {{{1
+// recursive nl-means algorithm <<<1
 
 // struct for storing the parameters of the algorithm
 struct vnlmeans_params
@@ -427,7 +427,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		int w, int h, int ch, float sigma,
 		const struct vnlmeans_params prms)
 {
-	// definitions {{{2
+	// definitions <<<2
 
 	const int psz = prms.patch_sz;
 //	const int step = prms.pixelwise ? 1 : psz/2;
@@ -468,11 +468,11 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	float M1 [ch][psz][psz]; // average patch at t
 	float V1 [ch][psz][psz]; // variance at t
 
-	// loop on image patches {{{2
 	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
 	for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
+	// loop on image patches <<<2
 	{
-		//	load target patch {{{3
+		//	load target patch <<<3
 		for (int hy = 0; hy < psz; ++hy)
 		for (int hx = 0; hx < psz; ++hx)
 		for (int c  = 0; c  < ch ; ++c )
@@ -488,7 +488,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 			V01[c][hy][hx] = 0.;
 		}
 
-		// gather spatio-temporal statistics: loop on search region {{{3
+		// gather spatio-temporal statistics: loop on search region <<<3
 		int np0 = 0; // number of similar patches with valid previous patch
 		int np1 = 0; // number of similar patches w/out valid previous patch
 		if (weights_hx2)
@@ -499,7 +499,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 			for (int qy = wy[0]; qy < wy[1]; ++qy)
 			for (int qx = wx[0]; qx < wx[1]; ++qx)
 			{
-				// store patch at q {{{4
+				// store patch at q <<<4
 
 				// check if the previous patch is valid
 				bool prev = d0;
@@ -520,7 +520,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				// TODO: compute separatedly distance at t and t-1 and then
 				// TODO  remove 2sigma2 from distance at t
 
-				// compute patch distance {{{4
+				// compute patch distance <<<4
 				float ww = 0; // patch distance is saved here
 				const float l = prms.dista_lambda;
 				for (int hy = 0; hy < psz; ++hy)
@@ -546,7 +546,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				// normalize distance
 				ww /= (float)psz*psz*ch;
 
-				// accumulate on patch statistics }}}4{{{4
+				// accumulate on patch statistics >>>4<<<4
 				if (ww <= weights_hx2)
 				{
 					np1++;
@@ -584,10 +584,10 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 							V01[c][hy][hx] += p*p;
 						}
 					}
-				} // }}}4
+				} // >>>4
 			}
 
-			// correct variance {{{4
+			// correct variance <<<4
 			const float inp0 = np0 ? 1./(float)np0 : 0;
 			const float inp1 = 1./(float)np1;
 			for (int c  = 0; c  < ch ; ++c )
@@ -601,7 +601,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 					V01[c][hy][hx] *= inp0;
 				}
 			}
-			// }}}4
+			// >>>4
 		}
 		else
 		{
@@ -642,10 +642,10 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 					p -= N1D0[c + ch][hy][hx];
 					V01[c][hy][hx] = p * p;
 				}
-			}//}}}4
+			}//>>>4
 		}
 
-		// filter current patch {{{3
+		// filter current patch <<<3
 
 		// check if the previous patch is valid
 		bool prev = d0;
@@ -704,7 +704,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		// invert dct (output in N1D0)
 		dct_threads_inverse((float *)N1D0, dcts);
 
-		// aggregate denoised patch on output image {{{3
+		// aggregate denoised patch on output image <<<3
 		if (a1)
 		{
 #ifdef WEIGHTED_AGGREGATION
@@ -726,10 +726,10 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 			for (int c = 0; c < ch ; ++c )
 				d1[py + psz/2][px + psz/2][c] += N1D0[c][psz/2][psz/2];
 
-		// }}}3
+		// >>>3
 	}
 
-	// normalize output {{{2
+	// normalize output <<<2
 	if (aggr1)
 	for (int i = 0, j = 0; i < w*h; ++i) 
 	for (int c = 0; c < ch ; ++c, ++j) 
@@ -739,10 +739,10 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	dct_threads_destroy(dcts);
 	if (aggr1) free(aggr1);
 
-	return; // }}}2
+	return; // >>>2
 }
 
-// main funcion {{{1
+// main funcion <<<1
 
 // 'usage' message in the command line
 static const char *const usages[] = {
@@ -753,11 +753,7 @@ static const char *const usages[] = {
 
 int main(int argc, const char *argv[])
 {
-	printf("TODO: patch distances: which is the best distance threshold?\n");
-	printf("TODO: add spatial denoising (sim. patches as "
-	       "observations of target patch)\n");
-
-	// parse command line {{{2
+	// parse command line <<<2
 
 	// command line parameters and their defaults
 	const char *nisy_path = NULL;
@@ -833,7 +829,7 @@ int main(int argc, const char *argv[])
 #endif
 	}
 
-	// load data {{{2
+	// load data <<<2
 	if (verbose) printf("loading video %s\n", nisy_path);
 	int w, h, c; //, frames = lframe - fframe + 1;
 	float * nisy = vio_read_video_float_vec(nisy_path, fframe, lframe, &w, &h, &c);
@@ -865,7 +861,7 @@ int main(int argc, const char *argv[])
 		}
 	}
 
-	// run denoiser {{{2
+	// run denoiser <<<2
 	const int whc = w*h*c, wh2 = w*h*2;
 	float * deno = nisy;
 	float * warp0 = malloc(whc*sizeof(float));
@@ -904,7 +900,7 @@ int main(int argc, const char *argv[])
 		memcpy(nisy1, deno1, whc*sizeof(float));
 	}
 
-	// save output {{{2
+	// save output <<<2
 	vio_save_video_float_vec(deno_path, deno, fframe, lframe, w, h, c);
 
 	if (deno1) free(deno1);
@@ -916,7 +912,7 @@ int main(int argc, const char *argv[])
 	if (nisy) free(nisy);
 	if (flow) free(flow);
 
-	return EXIT_SUCCESS; // }}}2
+	return EXIT_SUCCESS; // >>>2
 }
 
-// vim:set foldmethod=marker:
+// vim:set foldmethod=marker:set foldmarker <<<,>>>
