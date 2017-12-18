@@ -525,9 +525,6 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 					N1D0[c + ch][hy][hx] = prev ? d0[qy + hy][qx + hx][c] : 0;
 				}
 
-				// TODO: compute separatedly distance at t and t-1 and then
-				// TODO  remove 2sigma2 from distance at t
-
 				// compute patch distance <<<4
 				float ww = 0; // patch distance is saved here
 				const float l = prms.dista_lambda;
@@ -539,7 +536,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 						{
 							const float e1 = N1D0[c     ][hy][hx] - N1[hy][hx][c];
 							const float e0 = N1D0[c + ch][hy][hx] - D0[hy][hx][c];
-							ww += l * e1 * e1 + (1 - l) * e0 * e0;
+							ww += l * max(e1 * e1 - 2*sigma2,0) + (1 - l) * e0 * e0;
 						}
 					else
 					{
@@ -547,7 +544,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 						for (int c  = 0; c  < ch ; ++c )
 						{
 							const float e1 = N1D0[c][hy][hx] - N1[hy][hx][c];
-							ww += e1 * e1;
+							ww += max(e1 * e1 - 2*sigma2, 0);
 						}
 					}
 
