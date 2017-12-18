@@ -613,7 +613,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		}
 		else
 		{
-			// local version: single point estimate of statistics {{{4
+			// local version: single point estimate of statistics <<<4
 
 			// check if the previous patch is valid
 			bool prev = d0;
@@ -700,13 +700,40 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		}
 		else
 		{
-			printf("n0 = %d - n1 = %d ", np0, np1);
-			// TODO: spatial denoising using statistics in M1 V1
-			// FIXME: for the moment we paint in black pixels with few neighbors
+			// spatial nl-dct using statistics in M1 V1
+
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
-				N1D0[c][hy][hx] = 0;
+			{
+				// prediction variance (substract sigma2 from transition variance)
+				float v = max(0.f, V1[c][hy][hx] - sigma2);
+
+				// wiener filter
+				float a = v / (v + sigma2);
+				if (a < 0) printf("a = %f v = %f ", a, v);
+				if (a > 1) printf("a = %f v = %f ", a, v);
+
+				// filter
+				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*M1[c][hy][hx];
+
+				// variance of filtered patch
+				vp += a * a * v;
+
+//				vp += 1;
+//
+//				float a = (hy != 0 || hx != 0) ?// 0 : 1;
+//					(N1D0[c][hy][hx] * N1D0[c][hy][hx] > 3 * sigma2) : 1;
+//
+//				// filter
+//				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
+			}
+
+//			// FIXME: for the moment we paint in black pixels with few neighbors
+//			for (int c  = 0; c  < ch ; ++c )
+//			for (int hy = 0; hy < psz; ++hy)
+//			for (int hx = 0; hx < psz; ++hx)
+//				N1D0[c][hy][hx] = 0;
 		}
 
 		// invert dct (output in N1D0)
