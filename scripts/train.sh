@@ -19,12 +19,17 @@ derf/football_mono \
 derf/tennis_mono \
 derf/stefan_mono \
 )
-#tut/gsalesman \
 
 # seq folder
-sf='/home/pariasm/denoising/data/'
+sf='/mnt/nas-pf/'
 
 output=${1:-"trials"}
+
+export OMP_NUM_THREADS=1
+
+# we assume that the binaries are in the same folder as the script
+BIN=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+echo $BIN
 
 for ((i=0; i < $ntrials; i++))
 do
@@ -46,19 +51,18 @@ do
 	w=10
 
 	# spatial and temporal weights
-	W=$((4*s*s))
-	whx=$(awk -v M=$W -v s=$RANDOM 'BEGIN{srand(s); print int(rand()*(M+1))}')
-	wht=$(awk -v M=$W -v s=$RANDOM 'BEGIN{srand(s); print int(rand()*(M+1))}')
-	whv=$(awk -v M=$W -v s=$RANDOM 'BEGIN{srand(s); print int(rand()*(M+1))}')
-#	whv=0
+	dth=$(awk -v M=$((8*s)) -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M+1)}')
+	bx=$(awk -v M=3  -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M+1)}')
+	bt=$(awk -v M=10 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M+1)}')
+	lambda=$(awk -v s=$RANDOM 'BEGIN{srand(s); print rand()}')
 
-	lambtv=$(awk -v s=$RANDOM 'BEGIN{srand(s); print rand()}')
+	echo $s $dth $bx $bt $lambda 
 
-	trialfolder=$(printf "$output/rnlm.s%02d.p%02d.w%02d.whx%04d.wht%04d.whv%04d.lambtv%5.3f\n" \
-		$s $p $w $whx $wht $whv $lambtv)
+	trialfolder=$(printf "$output/s%02dp%02dw%02ddth%06.2fbx%4.2fbt%05.2fl%5.3f\n" \
+		$s $p $w $dth $bx $bt $lambda)
 
-	params=$(printf " -p %d -w %d --whx %d --wht %d --whtv %d --lambtv %f" \
-		$p $w $whx $wht $whv $lambtv)
+	params=$(printf " -p %d -w %d --dth %06.2f --beta_x %4.2f --beta_t %05.2f --lambda %5.3f" \
+		$p $w $dth $bx $bt $lambda)
 
 	mpsnr=0
 	nseqs=${#seqs[@]}
@@ -67,19 +71,15 @@ do
 	then
 		for seq in ${seqs[@]}
 		do
-			echo "./vnlm_train.sh ${sf}${seq} 1 $nf $s $trialfolder \"$params\""
-			./vnlm_train.sh ${sf}${seq} 1 $nf $s $trialfolder "$params"
-			psnr=$(./vnlm_train.sh ${sf}${seq} 1 $nf $s $trialfolder "$params")
+			echo  "$BIN/rnldct-train.sh ${sf}${seq} 1 $nf $s $trialfolder \"$params\""
+			psnr=$($BIN/rnldct-train.sh ${sf}${seq} 1 $nf $s $trialfolder  "$params")
 			mpsnr=$(echo "$mpsnr + $psnr/$nseqs" | bc -l)
-			#echo $mpsnr
 		done
 	fi
 	
-	printf "%2d %2d %2d %4d %4d %4d %5.3f %7.4f\n" \
-		$s $p $w $whx $wht $whv $lambtv $mpsnr >> $output/table
+	printf "%2d %2d %2d %06.2f %4.2f %05.2f %5.3f %7.4f\n" \
+		$s $p $w $dth $bx $bt $lambda $mpsnr >> $output/table
 
 	rm $trialfolder/*.tif
 
 done
-
-#	r=$(awk -v m=1 -v M=10 -v s=$RANDOM 'BEGIN{srand(s); print int(m+rand()*(M-m+1))}')

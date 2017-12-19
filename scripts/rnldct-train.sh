@@ -19,8 +19,11 @@ ORIG="$SEQ/%03d.png"
 NISY="$SEQ/s${SIG}/%03d.tif"
 FLOW="$SEQ/s${SIG}/tvl1_%03d_b.flo"
 
+# we assume that the binaries are in the same folder as the script
+DIR=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+
 # run denoising
-../build/bin/vnlmeans \
+$DIR/nlkalman-bwd \
  -i $NISY -o $FLOW -f $FFR -l $LFR -s $SIG \
  -d $OUT"/deno_%03d.tif" $PRM
 
@@ -28,27 +31,28 @@ FLOW="$SEQ/s${SIG}/tvl1_%03d_b.flo"
 for i in $(seq $FFR $LFR);
 do
 	# we remove a band of 10 pixels from each side of the frame
-	MM[$i]=$(psnr.sh $(printf $ORIG $i) $(printf $OUT/"deno_%03d.tif" $i) m 10)
-	MM[$i]=$(plambda -c "${MM[$i]} sqrt")
-	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *")
+	MM[$i]=$(psnr.sh $(printf $ORIG $i) $(printf $OUT/"deno_%03d.tif" $i) m 10 2>/dev/null)
+	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
+	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
 done
 
 echo "Frame RMSE " ${MM[*]}  > $OUT/measures
 echo "Frame PSNR " ${PP[*]} >> $OUT/measures
 
-# global psnr (from 4th frame)
+# global psnr (from 6th frame)
 SS=0
 n=0
-for i in $(seq $((FFR+3)) $LFR);
+for i in $(seq $((FFR+5)) $LFR);
 do
-	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /")
+	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
 	n=$((n+1))
 done
 
-RMSE=$(plambda -c "$SS sqrt")
-PSNR=$(plambda -c "255 $RMSE / log10 20 *")
+RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
+PSNR=$(plambda -c "255 $RMSE / log10 20 *" 2>/dev/null)
 echo "Total RMSE $RMSE" >> $OUT/measures
 echo "Total PSNR $PSNR" >> $OUT/measures
+echo $PSNR
 
 
 # vim:set foldmethod=marker:
