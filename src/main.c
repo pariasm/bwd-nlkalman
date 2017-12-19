@@ -399,12 +399,10 @@ struct vnlmeans_params
 {
 	int patch_sz;        // patch size
 	int search_sz;       // search window radius
-	float weights_hx;    // spatial weights selectivity parameter
-	float weights_thx;   // spatial weights threshold
-	float weights_ht;    // temporal weights parameter
-	float weights_htv;   // transition variance weights parameter
+	float dista_th;      // patch distance threshold
 	float dista_lambda;  // weight of current frame in patch distance
-	float tv_lambda;     // weight of current frame in patch distance
+	float beta_x;        // noise multiplier in spatial filtering
+	float beta_t;        // noise multiplier in kalman filtering
 	bool pixelwise;      // toggle pixel-wise nlmeans
 };
 
@@ -414,12 +412,10 @@ void vnlmeans_default_params(struct vnlmeans_params * p, float sigma)
 	const bool a = !(p->pixelwise); // set by caller
 	if (p->patch_sz     < 0) p->patch_sz     = a ? 8 : 5;
 	if (p->search_sz    < 0) p->search_sz    = 10;
-	if (p->weights_hx   < 0) p->weights_hx   = 0.85 * sigma;
-	if (p->weights_thx  < 0) p->weights_thx  = .05f;
-	if (p->weights_ht   < 0) p->weights_ht   = 1.4 * sigma;
-	if (p->weights_htv  < 0) p->weights_htv  = 2.0 * sigma;
+	if (p->dista_th     < 0) p->dista_th     = 0.85 * sigma;
 	if (p->dista_lambda < 0) p->dista_lambda = 1.;
-	if (p->tv_lambda    < 0) p->tv_lambda    = 1.;
+	if (p->beta_x       < 0) p->beta_x       = 1;
+	if (p->beta_t       < 0) p->beta_t       = 4;
 }
 
 // denoise frame t
@@ -433,9 +429,9 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	const int step = prms.pixelwise ? 1 : psz/2;
 //	const int step = prms.pixelwise ? 1 : psz;
 	const float sigma2 = sigma * sigma;
-	const float weights_hx2  = prms.weights_hx * prms.weights_hx;
-//	const float weights_ht2  = prms.weights_ht * prms.weights_ht;
-//	const float weights_htv2 = prms.weights_htv * prms.weights_htv;
+	const float dista_th2 = prms.dista_th * prms.dista_th;
+	const float beta_x  = prms.beta_x;
+	const float beta_t  = prms.beta_t;
 
 	// aggregation weights (not necessary for pixel-wise nlmeans)
 	float *aggr1 = prms.pixelwise ? NULL : malloc(w*h*sizeof(float));
@@ -501,7 +497,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		// gather spatio-temporal statistics: loop on search region [[[3
 		int np0 = 0; // number of similar patches with a  valid previous patch
 		int np1 = 0; // number of similar patches with no valid previous patch
-		if (weights_hx2)
+		if (dista_th2)
 		{
 			const int wsz = prms.search_sz;
 			const int wx[2] = {max(px - wsz, 0), min(px + wsz, w - psz) + 1};
@@ -556,7 +552,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				ww /= (float)psz*psz*ch;
 
 				// if patch at q is similar to patch at p, update statistics [[[4
-				if (ww <= weights_hx2)
+				if (ww <= dista_th2)
 				{
 					np1++;
 					np0 += prev ? 1 : 0;
@@ -612,7 +608,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 			}
 			// ]]]4
 		}
-		else
+		else // dista_th2 == 0
 		{
 			// local version: single point estimate of variances [[[4
 			//                the mean M1 is assumed to be 0
@@ -674,7 +670,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - sigma2);
 
 				// kalman gain
-				float a = v / (v + 4*sigma2); // FIXME: this should be a parameter
+				float a = v / (v + beta_t * sigma2);
 				if (a < 0) printf("a = %f v = %f ", a, v);
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
@@ -697,7 +693,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				float v = max(0.f, V1[c][hy][hx] - sigma2);
 
 				// wiener filter
-				float a = v / (v + sigma2);
+				float a = v / (v + beta_x * sigma2);
 				if (a < 0) printf("a = %f v = %f ", a, v);
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
@@ -778,14 +774,12 @@ int main(int argc, const char *argv[])
 	float sigma = 0.f;
 	bool verbose = false;
 	struct vnlmeans_params prms;
-	prms.patch_sz     = -1;
+	prms.patch_sz     = -1; // -1 means automatic value
 	prms.search_sz    = -1;
-	prms.weights_hx   = -1.; // -1 means automatic value
-	prms.weights_thx  = -1.;
-	prms.weights_ht   = -1.;
-	prms.weights_htv  = -1.;
+	prms.dista_th     = -1.;
+	prms.beta_x       = -1.;
+	prms.beta_t       = -1.;
 	prms.dista_lambda = -1.;
-	prms.tv_lambda    = -1.;
 	prms.pixelwise = false;
 
 	// configure command line parser
@@ -800,12 +794,10 @@ int main(int argc, const char *argv[])
 		OPT_FLOAT  ('s', "sigma" , &sigma, "noise standard dev"),
 		OPT_INTEGER('p', "patch" , &prms.patch_sz, "patch size"),
 		OPT_INTEGER('w', "search", &prms.search_sz, "search region radius"),
-		OPT_FLOAT  ( 0 , "whx"   , &prms.weights_hx, "spatial weights selectivity"),
-		OPT_FLOAT  ( 0 , "wthx"  , &prms.weights_thx, "spatial weights threshold"),
-		OPT_FLOAT  ( 0 , "wht"   , &prms.weights_ht, "temporal weights selectivity"),
-		OPT_FLOAT  ( 0 , "whtv"  , &prms.weights_htv, "transition variance weights selectivity"),
+		OPT_FLOAT  ( 0 , "dth"   , &prms.dista_th, "patch distance threshold"),
+		OPT_FLOAT  ( 0 , "beta_x", &prms.beta_x, "noise multiplier in spatial filtering"),
+		OPT_FLOAT  ( 0 , "beta_t", &prms.beta_t, "noise multiplier in kalman filtering"),
 		OPT_FLOAT  ( 0 , "lambda", &prms.dista_lambda, "noisy patch weight in patch distance"),
-		OPT_FLOAT  ( 0 , "lambtv", &prms.tv_lambda, "noisy patch weight in transition variance"),
 		OPT_BOOLEAN( 0 , "pixel" , &prms.pixelwise, "toggle pixel-wise denoising"),
 		OPT_GROUP("Program options"),
 		OPT_BOOLEAN('v', "verbose", &verbose, "verbose output"),
@@ -829,12 +821,10 @@ int main(int argc, const char *argv[])
 		printf("\t%s-wise mode\n", prms.pixelwise ? "pixel" : "patch");
 		printf("\tpatch     %d\n", prms.patch_sz);
 		printf("\tsearch    %d\n", prms.search_sz);
-		printf("\tw_hx      %g\n", prms.weights_hx);
-		printf("\tw_thx     %g\n", prms.weights_thx);
-		printf("\tw_ht      %g\n", prms.weights_ht);
-		printf("\tw_htv     %g\n", prms.weights_htv);
+		printf("\tdth       %g\n", prms.dista_th);
 		printf("\tlambda    %g\n", prms.dista_lambda);
-		printf("\ttv_lambda %g\n", prms.tv_lambda);
+		printf("\tbeta_x    %g\n", prms.beta_x);
+		printf("\tbeta_t    %g\n", prms.beta_t);
 		printf("\n");
 #ifdef VARIANCES
 		printf("\tVARIANCES ON\n");
