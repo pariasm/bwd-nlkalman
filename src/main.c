@@ -446,7 +446,6 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 
 	// noisy and clean patches at point p (as VLAs in the stack!)
 	float N1[psz][psz][ch]; // noisy patch at position p in frame t
-//	float D1[psz][psz][ch]; // denoised patch at p in frame t (target patch)
 	float D0[psz][psz][ch]; // denoised patch at p in frame t - 1
 
 	// wrap images with nice pointers to vlas
@@ -474,8 +473,8 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	float V1 [ch][psz][psz]; // variance at t
 
 	// loop on image patches [[[2
-	for (int oy = 0; oy < psz; oy += step) // FIXME: boundary pixels
-	for (int ox = 0; ox < psz; ox += step) // FIXME: boundary pixels
+	for (int oy = 0; oy < psz; oy += step) // split in grids of non-overlapping
+	for (int ox = 0; ox < psz; ox += step) // patches (for parallelization)
 	#pragma omp parallel for private(N1D0,N1,D0,M0,V0,V01,M1,V1)
 	for (int py = oy; py < h - psz + 1; py += psz) // FIXME: boundary pixels
 	for (int px = ox; px < w - psz + 1; px += psz) // may not be denoised
@@ -490,7 +489,6 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 			{
 				D0[hy][hx][c] = (prev_p) ? d0[py + hy][px + hx][c] : 0.f;
 				N1[hy][hx][c] = n1[py + hy][px + hx][c];
-//				D1[hy][hx][c] = 0;
 
 				M1 [c][hy][hx] = 0.;
 				V1 [c][hy][hx] = 0.;
@@ -501,8 +499,8 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		}
 
 		// gather spatio-temporal statistics: loop on search region [[[3
-		int np0 = 0; // number of similar patches with valid previous patch
-		int np1 = 0; // number of similar patches w/out valid previous patch
+		int np0 = 0; // number of similar patches with a  valid previous patch
+		int np1 = 0; // number of similar patches with no valid previous patch
 		if (weights_hx2)
 		{
 			const int wsz = prms.search_sz;
@@ -527,7 +525,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				for (int hy = 0; hy < psz; ++hy)
 				for (int hx = 0; hx < psz; ++hx)
 				{
-					N1D0[c][hy][hx] = n1[qy + hy][qx + hx][c];
+					N1D0[c     ][hy][hx] =        n1[qy + hy][qx + hx][c];
 					N1D0[c + ch][hy][hx] = prev ? d0[qy + hy][qx + hx][c] : 0;
 				}
 
@@ -554,7 +552,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 						}
 					}
 
-				// normalize distance
+				// normalize distance by number of pixels in patch
 				ww /= (float)psz*psz*ch;
 
 				// if patch at q is similar to patch at p, update statistics [[[4
@@ -623,7 +621,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
 			{
-				N1D0[c][hy][hx] = N1[hy][hx][c];
+				N1D0[c     ][hy][hx] =          N1[hy][hx][c];
 				N1D0[c + ch][hy][hx] = prev_p ? D0[hy][hx][c] : 0;
 			}
 
@@ -651,34 +649,27 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 
 		// filter current patch [[[3
 
-		// check if the previous patch is valid
-		bool prev = d0;
-		if (prev)
-			for (int hy = 0; hy < psz; ++hy)
-			for (int hx = 0; hx < psz; ++hx)
-			if (prev && isnan(D0[hy][hx][0]))
-				prev = false;
-		
+		// load patch in memory for fftw
 		for (int c  = 0; c  < ch ; ++c )
 		for (int hy = 0; hy < psz; ++hy)
 		for (int hx = 0; hx < psz; ++hx)
 		{
-			N1D0[c][hy][hx] = N1[hy][hx][c];
-			N1D0[c + ch][hy][hx] = prev ? D0[hy][hx][c] : 0;
+			N1D0[c     ][hy][hx] =          N1[hy][hx][c];
+			N1D0[c + ch][hy][hx] = prev_p ? D0[hy][hx][c] : 0;
 		}
 
-		// compute dct (output in N1D0)
+		// compute dct (computed in place in N1D0)
 		dct_threads_forward((float *)N1D0, dcts);
 
 		float vp = 0;
-		if (np0 > 4)
+		if (np0 > 4) // enough patches with a valid previous patch
 		{
+			// "kalman"-like spatio-temporal denoising
+
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
 			{
-				// "kalman"-like filtering
-
 				// prediction variance (substract sigma2 from transition variance)
 				float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - sigma2);
 
@@ -694,7 +685,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
 			}
 		}
-		else
+		else // not enough patches with valid previous patch
 		{
 			// spatial nl-dct using statistics in M1 V1
 
@@ -710,26 +701,19 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				if (a < 0) printf("a = %f v = %f ", a, v);
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
-				// filter
-				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*M1[c][hy][hx];
-
 				// variance of filtered patch
 				vp += a * a * v;
 
-//				vp += 1;
-//
-//				float a = (hy != 0 || hx != 0) ?// 0 : 1;
-//					(N1D0[c][hy][hx] * N1D0[c][hy][hx] > 3 * sigma2) : 1;
-//
-//				// filter
-//				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
-			}
+				/* thresholding instead of empirical Wiener filtering
+				vp += 1;
 
-//			// FIXME: for the moment we paint in black pixels with few neighbors
-//			for (int c  = 0; c  < ch ; ++c )
-//			for (int hy = 0; hy < psz; ++hy)
-//			for (int hx = 0; hx < psz; ++hx)
-//				N1D0[c][hy][hx] = 0;
+				float a = (hy != 0 || hx != 0) ?
+					(N1D0[c][hy][hx] * N1D0[c][hy][hx] > 3 * sigma2) : 1;*/
+
+				// filter
+				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*M1[c][hy][hx];
+
+			}
 		}
 
 		// invert dct (output in N1D0)
