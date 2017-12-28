@@ -690,7 +690,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		dct_threads_forward((float *)N1D0, dcts);
 
 		float vp = 0;
-		if (np0 > 4) // enough patches with a valid previous patch
+		if (np0 > 0) // enough patches with a valid previous patch
 		{
 			// "kalman"-like spatio-temporal denoising
 
