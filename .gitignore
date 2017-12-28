@@ -1,5 +1,7 @@
 build
 results
+.*.swp
+.*.swo
 
 # Prerequisites
 *.d
