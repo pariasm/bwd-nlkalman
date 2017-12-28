@@ -28,6 +28,7 @@
 #define PAR_DEFAULT_LAMBDA  0.15
 #define PAR_DEFAULT_THETA   0.3
 #define PAR_DEFAULT_NSCALES 100
+#define PAR_DEFAULT_FSCALE  0
 #define PAR_DEFAULT_ZFACTOR 0.5
 #define PAR_DEFAULT_NWARPS  5
 #define PAR_DEFAULT_EPSILON 0.01
@@ -74,10 +75,10 @@ int main(int argc, char *argv[])
 	if (argc < 3) {
 		fprintf(stderr, "Usage: %s I0 I1 [out "
 		//                       0 1  2   3
-		"nproc tau lambda theta nscales zfactor nwarps epsilon "
-		//  4  5   6      7     8       9       10     11
+		"nproc tau lambda theta nscales fscale zfactor nwarps epsilon "
+		//  4  5   6      7     8       9       10     11     12 
 		"verbose]\n", *argv);
-		// 12
+		// 13
 		return EXIT_FAILURE;
 	}
 
@@ -91,6 +92,7 @@ int main(int argc, char *argv[])
 	float lambda  = (argc>i)? atof(argv[i]): PAR_DEFAULT_LAMBDA;  i++;
 	float theta   = (argc>i)? atof(argv[i]): PAR_DEFAULT_THETA;   i++;
 	int   nscales = (argc>i)? atoi(argv[i]): PAR_DEFAULT_NSCALES; i++;
+	int   fscale  = (argc>i)? atoi(argv[i]): PAR_DEFAULT_FSCALE ; i++;
 	float zfactor = (argc>i)? atof(argv[i]): PAR_DEFAULT_ZFACTOR; i++;
 	int   nwarps  = (argc>i)? atoi(argv[i]): PAR_DEFAULT_NWARPS;  i++;
 	float epsilon = (argc>i)? atof(argv[i]): PAR_DEFAULT_EPSILON; i++;
@@ -157,6 +159,8 @@ int main(int argc, char *argv[])
 		const float N = 1 + log(hypot(nx, ny)/16.0) / log(1/zfactor);
 		if (N < nscales)
 			nscales = N;
+		if (nscales < fscale)
+			fscale = nscales;
 
 		if (verbose)
 			fprintf(stderr,
@@ -172,7 +176,7 @@ int main(int argc, char *argv[])
 		//compute the optical flow
 		Dual_TVL1_optic_flow_multiscale(
 				I0, I1, u, v, nx, ny, tau, lambda, theta,
-				nscales, zfactor, nwarps, epsilon, verbose
+				nscales, fscale, zfactor, nwarps, epsilon, verbose
 		);
 
 		//save the optical flow

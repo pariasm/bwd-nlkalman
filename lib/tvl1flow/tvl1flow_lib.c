@@ -40,6 +40,51 @@
  **/
 
 
+float energy_optic_flow(
+		float *I0,           // source image
+		float *I1,           // target image
+		float *u1,           // x component of the optical flow
+		float *u2,           // y component of the optical flow
+		float *diff,         // difference between I0 and I1 after warp
+		const int   nx,      // image width
+		const int   ny,      // image height
+		const float lambda   // weight parameter for the data term
+		)
+{
+	float energy = 0.;
+	const int   size = nx * ny;
+	size_t sf = sizeof(float);
+	float *I1w    = xmalloc(size*sf);
+	float *u1x    = xmalloc(size*sf);
+	float *u1y    = xmalloc(size*sf);
+	float *u2x    = xmalloc(size*sf);
+	float *u2y    = xmalloc(size*sf);
+
+	bicubic_interpolation_warp(I1,  u1, u2, I1w,  nx, ny, true);
+
+	// Compute the temporal difference (also called innovation ?)
+#pragma omp parallel for
+	for (int i = 0; i < size; i++)
+		diff[i] = abs(I1w[i] - I0[i]);
+	
+	forward_gradient(u1, u1x, u1y, nx ,ny);
+	forward_gradient(u2, u2x, u2y, nx ,ny);
+	
+#pragma omp parallel for reduction(+:energy)
+	for(int i = 0; i < size; ++i)
+		energy += abs(u1x[i]) + abs(u1y[i]) + lambda*diff[i];
+	energy /= size;
+
+	free(I1w);
+	free(u1x);
+	free(u1y);
+	free(u2x);
+	free(u2y);
+
+	return energy;
+}
+
+
 /**
  *
  * Function to compute the optical flow in one scale
@@ -308,6 +353,7 @@ void Dual_TVL1_optic_flow_multiscale(
 		const float lambda,  // weight parameter for the data term
 		const float theta,   // weight parameter for (u - v)²
 		const int   nscales, // number of scales
+		const int   fscale , // finer scale (drop the scales finer than this one)
 		const float zfactor, // factor for building the image piramid
 		const int   warps,   // number of warpings per scale
 		const float epsilon, // tolerance for numerical convergence
@@ -361,7 +407,7 @@ void Dual_TVL1_optic_flow_multiscale(
 		u1s[nscales-1][i] = u2s[nscales-1][i] = 0.0;
 
 	// pyramidal structure for computing the optical flow
-	for (int s = nscales-1; s >= 0; s--)
+	for (int s = nscales-1; s >= fscale; s--)
 	{
 		if (verbose)
 			fprintf(stderr, "Scale %d: %dx%d\n", s, nx[s], ny[s]);
@@ -372,6 +418,25 @@ void Dual_TVL1_optic_flow_multiscale(
 				tau, lambda, theta, warps, epsilon, verbose
 		);
 
+		// if this was the last scale, finish now
+		if (!s) break;
+
+		// otherwise, upsample the optical flow
+
+		// zoom the optical flow for the next finer scale
+		zoom_in(u1s[s], u1s[s-1], nx[s], ny[s], nx[s-1], ny[s-1]);
+		zoom_in(u2s[s], u2s[s-1], nx[s], ny[s], nx[s-1], ny[s-1]);
+
+		// scale the optical flow with the appropriate zoom factor
+		for (int i = 0; i < nx[s-1] * ny[s-1]; i++)
+		{
+			u1s[s-1][i] *= (float) 1.0 / zfactor;
+			u2s[s-1][i] *= (float) 1.0 / zfactor;
+		}
+	}
+
+	for(int s = fscale - 1; s >= 0; s--)
+	{
 		// if this was the last scale, finish now
 		if (!s) break;
 
