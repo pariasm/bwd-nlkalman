@@ -13,15 +13,21 @@ ntrials=1000
 
 # test sequences
 seqs=(\
-derf/bus_mono \
-derf/foreman_mono \
-derf/football_mono \
-derf/tennis_mono \
-derf/stefan_mono \
+derf-hd/park_joy \
+derf-hd/speed_bag \
+derf-hd/station2 \
+derf-hd/sunflower \
+derf-hd/tractor \
 )
+# derf/bus_mono \
+# derf/foreman_mono \
+# derf/football_mono \
+# derf/tennis_mono \
+# derf/stefan_mono \
 
 # seq folder
-sf='/mnt/nas-pf/'
+#sf='/mnt/nas-pf/'
+sf='/home/pariasm/denoising/data/'
 
 output=${1:-"trials"}
 
@@ -51,9 +57,9 @@ do
 	w=10
 
 	# spatial and temporal weights
-	dth=$(awk -v M=$((8*s)) -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M+1)}')
-	bx=$(awk -v M=3  -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M+1)}')
-	bt=$(awk -v M=10 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M+1)}')
+	dth=$(awk -v M=30 -v S=0 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
+	bx=$(awk -v M=8 -v s=$RANDOM 'BEGIN{srand(s); print rand()*M}')
+	bt=$(awk -v S=2 -v M=8 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
 	lambda=$(awk -v s=$RANDOM 'BEGIN{srand(s); print rand()}')
 
 	echo $s $dth $bx $bt $lambda 
@@ -66,13 +72,14 @@ do
 
 	mpsnr=0
 	nseqs=${#seqs[@]}
-	nf=15
+	ff=70
+	lf=85
 	if [ ! -d $trialfolder ]
 	then
 		for seq in ${seqs[@]}
 		do
-			echo  "$BIN/rnldct-train.sh ${sf}${seq} 1 $nf $s $trialfolder \"$params\""
-			psnr=$($BIN/rnldct-train.sh ${sf}${seq} 1 $nf $s $trialfolder  "$params")
+			echo  "$BIN/rnldct-train.sh ${sf}${seq} $ff $lf $s $trialfolder \"$params\""
+			psnr=$($BIN/rnldct-train.sh ${sf}${seq} $ff $lf $s $trialfolder  "$params")
 			mpsnr=$(echo "$mpsnr + $psnr/$nseqs" | bc -l)
 		done
 	fi
