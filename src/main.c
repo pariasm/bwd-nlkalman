@@ -409,13 +409,45 @@ struct vnlmeans_params
 // set default parameters as a function of sigma
 void vnlmeans_default_params(struct vnlmeans_params * p, float sigma)
 {
-	const bool a = !(p->pixelwise); // set by caller
-	if (p->patch_sz     < 0) p->patch_sz     = a ? 8 : 5;
-	if (p->search_sz    < 0) p->search_sz    = 10;
-	if (p->dista_th     < 0) p->dista_th     = 0.85 * sigma;
-	if (p->dista_lambda < 0) p->dista_lambda = 1.;
-	if (p->beta_x       < 0) p->beta_x       = 1;
-	if (p->beta_t       < 0) p->beta_t       = 4;
+	/* we trained using two different datasets (both grayscale): 
+	 * - derfhd: videos of half hd resolution obtained by downsampling
+	 *           some hd videos from the derf database
+	 * - derfcif: videos of cif resolution also of the derf db
+	 *
+	 * we found that the optimal parameters differ. in both cases, the relevant
+	 * parameters were the patch distance threshold and the b_t coefficient that
+	 * controls the amount of temporal averaging.
+	 *
+	 * with the derfhd videos, the distance threshold is lower (i.e. patches
+	 * are required to be at a smallest distance to be considered 'similar',
+	 * and the temporal averaging is higher.
+	 *
+	 * the reason for the lowest distance threshold is that the derfhd videos 
+	 * are smoother than the cif ones. in fact, the cif ones are not properly
+	 * sampled and have a considerable amount of aliasing. this high frequencies
+	 * increase the distance between similar patches. 
+	 *
+	 * i don't know which might be the reason for the increase in the temporal 
+	 * averaging factor. perhaps that (a) the optical flow can be better estimated
+	 * (b) there are more homogeneous regions. in the case of (b), even if the oflow
+	 * is not correct, increasing the temporal averaging at these homogeneous regions
+	 * might lead to a global decrease in psnr */
+#define DERFHD_PARAMS
+#ifdef DERFHD_PARAMS
+	if (p->patch_sz     < 0) p->patch_sz     = 8;  // not tuned
+	if (p->search_sz    < 0) p->search_sz    = 10; // not tuned
+	if (p->dista_th     < 0) p->dista_th     = sigma + 10.0;
+	if (p->dista_lambda < 0) p->dista_lambda = 1.0;
+	if (p->beta_x       < 0) p->beta_x       = 2.4;
+	if (p->beta_t       < 0) p->beta_t       = 8.0;
+#else // DERFCIF_PARAMS
+	if (p->patch_sz     < 0) p->patch_sz     = 8;  // not tuned
+	if (p->search_sz    < 0) p->search_sz    = 10; // not tuned
+	if (p->dista_th     < 0) p->dista_th     = (60. - 38.)*(sigma - 10.) + 38.0;
+	if (p->dista_lambda < 0) p->dista_lambda = 1.0;
+	if (p->beta_x       < 0) p->beta_x       = 2.4;
+	if (p->beta_t       < 0) p->beta_t       = 4.5;
+#endif
 }
 
 // denoise frame t
