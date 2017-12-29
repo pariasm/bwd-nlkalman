@@ -398,6 +398,67 @@ void dct_threads_inverse(float * patch, struct dct_threads * dct_t)
 }
 
 
+// window functions [[[1
+
+float * window_function(const char * type, int NN)
+{
+	const float N = (float)NN;
+	const float N2 = (N - 1.)/2.;
+	const float PI = 3.14159265358979323846;
+	float w1[NN];
+
+	if (strcmp(type, "parzen") == 0)
+		for (int n = 0; n < NN; ++n)
+		{
+			float nc = (float)n - N2;
+			w1[n] = (fabs(nc) <= N/4.)
+			      ? 1. - 24.*nc*nc/N/N*(1. - 2./N*fabs(nc))
+					: 2.*pow(1. - 2./N*fabs(nc), 3.);
+		}
+	else if (strcmp(type, "welch") == 0)
+		for (int n = 0; n < NN; ++n)
+		{
+			const float nc = ((float)n - N2)/N2;
+			w1[n] = 1. - nc*nc;
+		}
+	else if (strcmp(type, "sine") == 0)
+		for (int n = 0; n < NN; ++n)
+			w1[n] = sin(PI*(float)n/(N-1));
+	else if (strcmp(type, "hanning") == 0)
+		for (int n = 0; n < NN; ++n)
+		{
+			w1[n] = sin(PI*(float)n/(N-1));
+			w1[n] *= w1[n];
+		}
+	else if (strcmp(type, "hamming") == 0)
+		for (int n = 0; n < NN; ++n)
+			w1[n] = 0.54 - 0.46*cos(2*PI*(float)n/(N-1));
+	else if (strcmp(type, "blackman") == 0)
+		for (int n = 0; n < NN; ++n)
+			w1[n] = 0.42 - 0.5*cos(2*PI*(float)n/(N-1)) + 0.08*cos(4*PI*n/(N-1));
+	else if (strcmp(type, "gaussian") == 0)
+		for (int n = 0; n < NN; ++n)
+		{
+			const float s = .4; // scale parameter for the Gaussian
+			const float x = ((float)n - N2)/N2/s;
+			w1[n] = exp(-.5*x*x);
+		}
+	else // default is the flat window
+		for (int n = 0; n < NN; ++n)
+			w1[n] = 1.f;
+
+	// 2D separable window
+	float * w2 = malloc(NN*NN*sizeof(float));
+	for (int i = 0; i < NN; ++i)
+	for (int j = 0; j < NN; ++j)
+		w2[i*NN + j] = w1[i]*w1[j];
+
+	return w2;
+}
+
+
+
+
 // recursive nl-means algorithm [[[1
 
 // struct for storing the parameters of the algorithm
@@ -477,6 +538,14 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	// set output and aggregation weights to 0
 	for (int i = 0; i < w*h*ch; ++i) deno1[i] = 0.;
 	if (aggr1) for (int i = 0; i < w*h; ++i) aggr1[i] = 0.;
+
+	// compute a window (to reduce blocking artifacts)
+	float *window = window_function("gaussian", psz);
+	float W[psz][psz];
+	for (int i = 0; i < psz; ++i)
+	for (int j = 0; j < psz; ++j)
+		W[i][j] = window[i*psz + j];
+	free(window);
 
 	// noisy and clean patches at point p (as VLAs in the stack!)
 	float N1[psz][psz][ch]; // noisy patch at position p in frame t
@@ -770,9 +839,9 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
 			{
-				a1[py + hy][px + hx] += w;
+				a1[py + hy][px + hx] += w * W[hy][hx];
 				for (int c = 0; c < ch ; ++c )
-					d1[py + hy][px + hx][c] += w * N1D0[c][hy][hx];
+					d1[py + hy][px + hx][c] += w * W[hy][hx] * N1D0[c][hy][hx];
 			}
 		}
 		else 
