@@ -649,7 +649,7 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 						{
 							const float e1 = N1D0[c     ][hy][hx] - N1[hy][hx][c];
 							const float e0 = N1D0[c + ch][hy][hx] - D0[hy][hx][c];
-							ww += l * max(e1 * e1 - 2*sigma2,0) + (1 - l) * e0 * e0;
+							ww += l * (e1 * e1 - 2*sigma2) + (1 - l) * e0 * e0;
 						}
 					else
 					{
@@ -657,12 +657,12 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 						for (int c  = 0; c  < ch ; ++c )
 						{
 							const float e1 = N1D0[c][hy][hx] - N1[hy][hx][c];
-							ww += max(e1 * e1 - 2*sigma2, 0);
+							ww += e1 * e1 - 2*sigma2;
 						}
 					}
 
 				// normalize distance by number of pixels in patch
-				ww /= (float)psz*psz*ch;
+				ww = max(ww / ((float)psz*psz*ch), 0);
 
 				// if patch at q is similar to patch at p, update statistics [[[4
 				if (ww <= dista_th2)
@@ -814,10 +814,11 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 				vp += a * a * v;
 
 				/* thresholding instead of empirical Wiener filtering
-				vp += 1;
-
 				float a = (hy != 0 || hx != 0) ?
-					(N1D0[c][hy][hx] * N1D0[c][hy][hx] > 3 * sigma2) : 1;*/
+				//	(N1D0[c][hy][hx] * N1D0[c][hy][hx] > 3 * sigma2) : 1;
+					(v > 1 * sigma2) : 1;
+				float a = (hy != 0 || hx != 0) ?
+				vp += a;*/
 
 				// filter
 				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*M1[c][hy][hx];
