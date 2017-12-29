@@ -57,9 +57,9 @@ do
 	w=10
 
 	# spatial and temporal weights
-	dth=$(awk -v M=30 -v S=0 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
+	dth=$(awk -v M=60 -v S=0 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
 	bx=$(awk -v M=8 -v s=$RANDOM 'BEGIN{srand(s); print rand()*M}')
-	bt=$(awk -v S=2 -v M=8 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
+	bt=$(awk -v S=2 -v M=12 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
 	lambda=$(awk -v s=$RANDOM 'BEGIN{srand(s); print rand()}')
 
 	echo $s $dth $bx $bt $lambda 
