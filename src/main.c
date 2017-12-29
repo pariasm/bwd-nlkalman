@@ -451,9 +451,9 @@ void vnlmeans_default_params(struct vnlmeans_params * p, float sigma)
 }
 
 // denoise frame t
-void vnlmeans_frame(float *deno1, float *nisy1, float *deno0, 
+void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 		int w, int h, int ch, float sigma,
-		const struct vnlmeans_params prms)
+		const struct vnlmeans_params prms, int frame)
 {
 	// definitions [[[2
 
@@ -499,6 +499,12 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	float V01[ch][psz][psz]; // transition variance from t-1 to t
 	float M1 [ch][psz][psz]; // average patch at t
 	float V1 [ch][psz][psz]; // variance at t
+
+#ifdef DUMP_INFO
+	float *np0image = (float *)malloc(w*h*sizeof(float));
+	float (*np0im)[w] = (void *)np0image;
+	for (int i = 0; i < w*h; i++) np0image[i] = 0.f;
+#endif
 
 	// loop on image patches [[[2
 	for (int oy = 0; oy < psz; oy += step) // split in grids of non-overlapping
@@ -740,7 +746,6 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 
 				// filter
 				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*M1[c][hy][hx];
-
 			}
 		}
 
@@ -777,6 +782,14 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	for (int i = 0, j = 0; i < w*h; ++i) 
 	for (int c = 0; c < ch ; ++c, ++j) 
 		deno1[j] /= aggr1[i];
+
+#ifdef DUMP_INFO
+	{
+		char name[512];
+		sprintf(name, "occ.%03d.tif", frame);
+		iio_save_image_float_vec(name, np0image, w, h, 1);
+	}
+#endif
 
 	// free allocated mem and quit
 	dct_threads_destroy(dcts);
@@ -933,7 +946,7 @@ int main(int argc, const char *argv[])
 		// run denoising
 		float *nisy1 = nisy + (f - fframe)*whc;
 		float *deno0 = (f > fframe) ? warp0 : NULL;
-		vnlmeans_frame(deno1, nisy1, deno0, w, h, c, sigma, prms);
+		vnlmeans_frame(deno1, nisy1, deno0, w, h, c, sigma, prms, f);
 		memcpy(nisy1, deno1, whc*sizeof(float));
 	}
 
