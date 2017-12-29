@@ -139,16 +139,22 @@ void bicubic_interpolation_nans(float *result,
 }
 
 static
-void warp_bicubic_inplace(float *imw, float *im, float *of, int w, int h, int ch)
+void warp_bicubic_inplace(float *imw, float *im, float *of, float *msk,
+		int w, int h, int ch)
 {
 	// warp previous frame
 	for (int y = 0; y < h; ++y)
 	for (int x = 0; x < w; ++x)
+	if (!msk || (msk &&  msk[x + y*w] == 0))
 	{
 		float xw = x + of[(x + y*w)*2 + 0];
 		float yw = y + of[(x + y*w)*2 + 1];
 		bicubic_interpolation_nans(imw + (x + y*w)*ch, im, w, h, ch, xw, yw);
 	}
+	else
+		for (int c = 0; c < ch; ++c)
+			imw[(x + y*w)*ch + c] = NAN;
+
 	return;
 }
 
@@ -815,6 +821,7 @@ int main(int argc, const char *argv[])
 	const char *nisy_path = NULL;
 	const char *deno_path = NULL;
 	const char *flow_path = NULL;
+	const char *occl_path = NULL;
 	int fframe = 0, lframe = -1;
 	float sigma = 0.f;
 	bool verbose = false;
@@ -833,6 +840,7 @@ int main(int argc, const char *argv[])
 		OPT_GROUP("Algorithm options"),
 		OPT_STRING ('i', "nisy"  , &nisy_path, "noisy input path (printf format)"),
 		OPT_STRING ('o', "flow"  , &flow_path, "backward flow path (printf format)"),
+		OPT_STRING ('k', "occl"  , &occl_path, "flow occlusions mask (printf format)"),
 		OPT_STRING ('d', "deno"  , &deno_path, "denoised output path (printf format)"),
 		OPT_INTEGER('f', "first" , &fframe, "first frame"),
 		OPT_INTEGER('l', "last"  , &lframe , "last frame"),
@@ -911,6 +919,31 @@ int main(int argc, const char *argv[])
 		}
 	}
 
+	// load occlusion masks
+	float * occl = NULL;
+	if (flow_path && occl_path)
+	{
+		if (verbose) printf("loading occl. mask %s\n", occl_path);
+		int w1, h1, c1;
+		occl = vio_read_video_float_vec(occl_path, fframe, lframe, &w1, &h1, &c1);
+
+		if (!occl)
+		{
+			if (nisy) free(nisy);
+			if (flow) free(flow);
+			return EXIT_FAILURE;
+		}
+
+		if (w*h != w1*h1 || c1 != 1)
+		{
+			fprintf(stderr, "Video and occl. masks size missmatch\n");
+			if (nisy) free(nisy);
+			if (flow) free(flow);
+			if (occl) free(occl);
+			return EXIT_FAILURE;
+		}
+	}
+
 	// run denoiser [[[2
 	const int whc = w*h*c, wh2 = w*h*2;
 	float * deno = nisy;
@@ -932,10 +965,11 @@ int main(int argc, const char *argv[])
 			float * deno0 = deno + (f - 1 - fframe)*whc;
 			if (flow)
 			{
-				float * flow0 = flow + (f - 0 - fframe)*wh2;
-				warp_bicubic_inplace(warp0, deno0, flow0, w, h, c);
+				float * flow0 = flow + (f - fframe)*wh2;
+				float * occl1 = occl ? occl + (f - fframe)*w*h : NULL;
+				warp_bicubic_inplace(warp0, deno0, flow0, occl1, w, h, c);
 #ifdef VARIANCES
-				warp_bicubic_inplace(vari0, vari1, flow0, w, h, 1);
+				warp_bicubic_inplace(vari0, vari1, flow0, occl1, w, h, 1);
 #endif
 			}
 			else
