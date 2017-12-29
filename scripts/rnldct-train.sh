@@ -18,13 +18,14 @@ mkdir -p $OUT
 ORIG="$SEQ/%03d.png"
 NISY="$SEQ/s${SIG}/%03d.tif"
 FLOW="$SEQ/s${SIG}/tvl1_%03d_b.flo"
+OCCL="$SEQ/s${SIG}/occl_%03d_b.png"
 
 # we assume that the binaries are in the same folder as the script
 DIR=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 
 # run denoising
 $DIR/nlkalman-bwd \
- -i $NISY -o $FLOW -f $FFR -l $LFR -s $SIG \
+ -i $NISY -o $FLOW -k $OCCL -f $FFR -l $LFR -s $SIG \
  -d $OUT"/deno_%03d.tif" $PRM
 
 # frame-by-frame psnr

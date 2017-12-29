@@ -52,10 +52,22 @@ do
 done
 cp $(printf $OUT"/%03d_b.flo" $((FFR+1))) $(printf $OUT"/%03d_b.flo" $FFR)
 
+# compute occlusion masks {{{1
+for i in $(seq $FFR $LFR);
+do
+	file=$(printf $OUT"/occ_%03d_b.png" $i)
+	if [ ! -f $file ]
+	then
+		plambda $(printf $OUT"/%03d_b.flo" $i) \
+				"x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.5 > 255 *" \
+				-o $file
+	fi
+done
+
 # run denoising {{{1
 $DIR/nlkalman-bwd \
- -i $OUT"/%03d.tif" -o $OUT"/%03d_b.flo" -f $FFR -l $LFR -s $SIG \
- -d $OUT"/deno_%03d.tif" $PRM
+ -i $OUT"/%03d.tif" -o $OUT"/%03d_b.flo" -k $OUT"/occ_%03d_b.png" \
+ -f $FFR -l $LFR -s $SIG -d $OUT"/deno_%03d.tif" $PRM
 
 # compute psnr {{{1
 for i in $(seq $FFR $LFR);
