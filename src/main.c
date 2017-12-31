@@ -503,10 +503,10 @@ void vnlmeans_default_params(struct vnlmeans_params * p, float sigma)
 #ifdef DERFHD_PARAMS
 	if (p->patch_sz     < 0) p->patch_sz     = 8;  // not tuned
 	if (p->search_sz    < 0) p->search_sz    = 10; // not tuned
-	if (p->dista_th     < 0) p->dista_th     = sigma + 10.0;
+	if (p->dista_th     < 0) p->dista_th     = .5*sigma + 15.0;
 	if (p->dista_lambda < 0) p->dista_lambda = 1.0;
-	if (p->beta_x       < 0) p->beta_x       = 2.4;
-	if (p->beta_t       < 0) p->beta_t       = 8.0;
+	if (p->beta_x       < 0) p->beta_x       = 3.0;
+	if (p->beta_t       < 0) p->beta_t       = 0.05*sigma + 6.0;
 #else // DERFCIF_PARAMS
 	if (p->patch_sz     < 0) p->patch_sz     = 8;  // not tuned
 	if (p->search_sz    < 0) p->search_sz    = 10; // not tuned
