@@ -8,11 +8,6 @@
 
 // some macros and data types [[[1
 
-//#define DUMP_INFO
-
-// comment for a simpler version without keeping track of pixel variances
-//#define VARIANCES
-
 // comment for uniform aggregation
 //#define WEIGHTED_AGGREGATION
 
@@ -462,7 +457,7 @@ float * window_function(const char * type, int NN)
 // recursive nl-means algorithm [[[1
 
 // struct for storing the parameters of the algorithm
-struct vnlmeans_params
+struct nlkalman_params
 {
 	int patch_sz;        // patch size
 	int search_sz;       // search window radius
@@ -474,7 +469,7 @@ struct vnlmeans_params
 };
 
 // set default parameters as a function of sigma
-void vnlmeans_default_params(struct vnlmeans_params * p, float sigma)
+void nlkalman_default_params(struct nlkalman_params * p, float sigma)
 {
 	/* we trained using two different datasets (both grayscale): 
 	 * - derfhd: videos of half hd resolution obtained by downsampling
@@ -518,9 +513,9 @@ void vnlmeans_default_params(struct vnlmeans_params * p, float sigma)
 }
 
 // denoise frame t
-void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
+void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 		int w, int h, int ch, float sigma,
-		const struct vnlmeans_params prms, int frame)
+		const struct nlkalman_params prms, int frame)
 {
 	// definitions [[[2
 
@@ -574,12 +569,6 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	float V01[ch][psz][psz]; // transition variance from t-1 to t
 	float M1 [ch][psz][psz]; // average patch at t
 	float V1 [ch][psz][psz]; // variance at t
-
-#ifdef DUMP_INFO
-	float *np0image = (float *)malloc(w*h*sizeof(float));
-	float (*np0im)[w] = (void *)np0image;
-	for (int i = 0; i < w*h; i++) np0image[i] = 0.f;
-#endif
 
 	// loop on image patches [[[2
 	for (int oy = 0; oy < psz; oy += step) // split in grids of non-overlapping
@@ -859,14 +848,6 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 	for (int c = 0; c < ch ; ++c, ++j) 
 		deno1[j] /= aggr1[i];
 
-#ifdef DUMP_INFO
-	{
-		char name[512];
-		sprintf(name, "occ.%03d.tif", frame);
-		iio_save_image_float_vec(name, np0image, w, h, 1);
-	}
-#endif
-
 	// free allocated mem and quit
 	dct_threads_destroy(dcts);
 	if (aggr1) free(aggr1);
@@ -878,8 +859,8 @@ void vnlmeans_frame(float *deno1, float *nisy1, float *deno0,
 
 // 'usage' message in the command line
 static const char *const usages[] = {
-	"vnlmeans [options] [[--] args]",
-	"vnlmeans [options]",
+	"nlkalman-bwd [options] [[--] args]",
+	"nlkalman-bwd [options]",
 	NULL,
 };
 
@@ -895,7 +876,7 @@ int main(int argc, const char *argv[])
 	int fframe = 0, lframe = -1;
 	float sigma = 0.f;
 	bool verbose = false;
-	struct vnlmeans_params prms;
+	struct nlkalman_params prms;
 	prms.patch_sz     = -1; // -1 means automatic value
 	prms.search_sz    = -1;
 	prms.dista_th     = -1.;
@@ -934,7 +915,7 @@ int main(int argc, const char *argv[])
 	argc = argparse_parse(&argparse, argc, argv);
 
 	// default value for noise-dependent params
-	vnlmeans_default_params(&prms, sigma);
+	nlkalman_default_params(&prms, sigma);
 
 	// print parameters
 	if (verbose)
@@ -949,9 +930,6 @@ int main(int argc, const char *argv[])
 		printf("\tbeta_x    %g\n", prms.beta_x);
 		printf("\tbeta_t    %g\n", prms.beta_t);
 		printf("\n");
-#ifdef VARIANCES
-		printf("\tVARIANCES ON\n");
-#endif
 #ifdef WEIGHTED_AGGREGATION
 		printf("\tWEIGHTED_AGGREGATION ON\n");
 #endif
@@ -1019,10 +997,6 @@ int main(int argc, const char *argv[])
 	float * deno = nisy;
 	float * warp0 = malloc(whc*sizeof(float));
 	float * deno1 = malloc(whc*sizeof(float));
-#ifdef VARIANCES
-	float * vari0 = malloc(w*h*sizeof(float));
-	float * vari1 = malloc(w*h*sizeof(float));
-#endif
 	for (int f = fframe; f <= lframe; ++f)
 	{
 		if (verbose) printf("processing frame %d\n", f);
@@ -1038,9 +1012,6 @@ int main(int argc, const char *argv[])
 				float * flow0 = flow + (f - fframe)*wh2;
 				float * occl1 = occl ? occl + (f - fframe)*w*h : NULL;
 				warp_bicubic_inplace(warp0, deno0, flow0, occl1, w, h, c);
-#ifdef VARIANCES
-				warp_bicubic_inplace(vari0, vari1, flow0, occl1, w, h, 1);
-#endif
 			}
 			else
 				// copy without warping
@@ -1050,7 +1021,7 @@ int main(int argc, const char *argv[])
 		// run denoising
 		float *nisy1 = nisy + (f - fframe)*whc;
 		float *deno0 = (f > fframe) ? warp0 : NULL;
-		vnlmeans_frame(deno1, nisy1, deno0, w, h, c, sigma, prms, f);
+		nlkalman_frame(deno1, nisy1, deno0, w, h, c, sigma, prms, f);
 		memcpy(nisy1, deno1, whc*sizeof(float));
 	}
 
@@ -1059,10 +1030,6 @@ int main(int argc, const char *argv[])
 
 	if (deno1) free(deno1);
 	if (warp0) free(warp0);
-#ifdef VARIANCES
-	if (vari0) free(vari0);
-	if (vari1) free(vari1);
-#endif
 	if (nisy) free(nisy);
 	if (flow) free(flow);
 
