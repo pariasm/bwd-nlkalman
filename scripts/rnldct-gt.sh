@@ -36,39 +36,42 @@ do
 	fi
 done
 
-# compute optical flow {{{1
-TVL1="$DIR/tvl1flow"
-FSCALE=2
-for i in $(seq $((FFR+1)) $LFR);
-do
-	file=$(printf $OUT"/%03d_b.flo" $i)
-	if [ ! -f $file ]
-	then
-		$TVL1 $(printf $OUT"/%03d.tif" $i) \
-				$(printf $OUT"/%03d.tif" $((i-1))) \
-				$file \
-				0 0.25 0.2 0.3 100 $FSCALE 0.5 5 0.01 0; 
-	fi
-done
-cp $(printf $OUT"/%03d_b.flo" $((FFR+1))) $(printf $OUT"/%03d_b.flo" $FFR)
+# # compute optical flow {{{1
+# TVL1="$DIR/tvl1flow"
+# FSCALE=2
+# for i in $(seq $((FFR+1)) $LFR);
+# do
+# 	file=$(printf $OUT"/%03d_b.flo" $i)
+# 	if [ ! -f $file ]
+# 	then
+# 		$TVL1 $(printf $OUT"/%03d.tif" $i) \
+# 				$(printf $OUT"/%03d.tif" $((i-1))) \
+# 				$file \
+# 				0 0.25 0.2 0.3 100 $FSCALE 0.5 5 0.01 0; 
+# 	fi
+# done
+# cp $(printf $OUT"/%03d_b.flo" $((FFR+1))) $(printf $OUT"/%03d_b.flo" $FFR)
+# 
+# # compute occlusion masks {{{1
+# for i in $(seq $FFR $LFR);
+# do
+# 	file=$(printf $OUT"/occ_%03d_b.png" $i)
+# 	if [ ! -f $file ]
+# 	then
+# 		plambda $(printf $OUT"/%03d_b.flo" $i) \
+# 				"x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.5 > 255 *" \
+# 				-o $file
+# 	fi
+# done
+# 
+# # run denoising {{{1
+# $DIR/nlkalman-bwd \
+#  -i $OUT"/%03d.tif" -o $OUT"/%03d_b.flo" -k $OUT"/occ_%03d_b.png" \
+#  -f $FFR -l $LFR -s $SIG -d $OUT"/deno_%03d.tif" $PRM
 
-# compute occlusion masks {{{1
-for i in $(seq $FFR $LFR);
-do
-	file=$(printf $OUT"/occ_%03d_b.png" $i)
-	if [ ! -f $file ]
-	then
-		plambda $(printf $OUT"/%03d_b.flo" $i) \
-				"x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.5 > 255 *" \
-				-o $file
-	fi
-done
-
-# run denoising {{{1
-$DIR/nlkalman-bwd \
- -i $OUT"/%03d.tif" -o $OUT"/%03d_b.flo" -k $OUT"/occ_%03d_b.png" \
- -f $FFR -l $LFR -s $SIG -d $OUT"/deno_%03d.tif" $PRM
-
+# run denoising script
+$DIR/rnldct.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT $PRM
+ 
 # compute psnr {{{1
 for i in $(seq $FFR $LFR);
 do
