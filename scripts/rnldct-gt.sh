@@ -70,7 +70,7 @@ done
 #  -f $FFR -l $LFR -s $SIG -d $OUT"/deno_%03d.tif" $PRM
 
 # run denoising script
-$DIR/rnldct.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT $PRM
+$DIR/rnldct.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT "$PRM"
  
 # compute psnr {{{1
 for i in $(seq $FFR $LFR);
