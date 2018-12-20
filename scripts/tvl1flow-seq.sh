@@ -30,10 +30,10 @@ do
 	file=$(printf $OUT"/%03d_b_s1.flo" $i)
 	if [ ! -f $file ]
 	then
-		$TVL1 $(printf $OUT"/%03d.tif" $i) \
-				$(printf $OUT"/%03d.tif" $((i-1))) \
-				$file \
-				0 0.25 0.2 0.3 100 $FSCALE 0.5 5 0.01 0; 
+		$TVL1 $(printf $SEQ $i) \
+		      $(printf $SEQ $((i-1))) \
+		      $file \
+		      0 0.25 0.2 0.3 100 $FSCALE 0.5 5 0.01 0;
 	fi
 done
 cp $(printf $OUT"/%03d_b_s1.flo" $((FFR+1))) $(printf $OUT"/%03d_b_s1.flo" $FFR)
@@ -45,8 +45,8 @@ do
 	if [ ! -f $file ]
 	then
 		plambda $(printf $OUT"/%03d_b_s1.flo" $i) \
-				"x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.75 > 255 *" \
-				-o $file
+		    "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.75 > 255 *" \
+		    -o $file
 	fi
 done
 
