@@ -57,18 +57,24 @@ do
 	w=10
 
 	# spatial and temporal weights
-	dth=$(awk -v M=60 -v S=0 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
+#	dth=$(awk -v M=60 -v S=0 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
+	np=$(awk -v M=99 -v S=0 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
 	bx=$(awk -v M=8 -v s=$RANDOM 'BEGIN{srand(s); print rand()*M}')
 	bt=$(awk -v S=2 -v M=12 -v s=$RANDOM 'BEGIN{srand(s); print rand()*(M - S) + S}')
 	lambda=$(awk -v s=$RANDOM 'BEGIN{srand(s); print rand()}')
 
-	echo $s $dth $bx $bt $lambda 
+	echo $s $dth $bx $bt $lambda
+	echo $s $np $bx $bt $lambda
 
-	trialfolder=$(printf "$output/s%02dp%02dw%02ddth%06.2fbx%4.2fbt%05.2fl%5.3f\n" \
-		$s $p $w $dth $bx $bt $lambda)
+#	trialfolder=$(printf "$output/s%02dp%02dw%02ddth%06.2fbx%4.2fbt%05.2fl%5.3f\n" \
+#		$s $p $w $dth $bx $bt $lambda)
+	trialfolder=$(printf "$output/s%02dp%02dw%02dnp%02dbx%4.2fbt%05.2fl%5.3f\n" \
+		$s $p $w $np $bx $bt $lambda)
 
-	params=$(printf " -p %d -w %d --dth %06.2f --beta_x %4.2f --beta_t %05.2f --lambda %5.3f" \
-		$p $w $dth $bx $bt $lambda)
+#	params=$(printf " -p %d -w %d --dth %06.2f --beta_x %4.2f --beta_t %05.2f --lambda %5.3f" \
+#		$p $w $dth $bx $bt $lambda)
+	params=$(printf " -p %d -w %d --npatches %02d --beta_x %4.2f --beta_t %05.2f --lambda %5.3f" \
+		$p $w $np $bx $bt $lambda)
 
 	mpsnr=0
 	nseqs=${#seqs[@]}
