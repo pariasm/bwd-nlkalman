@@ -40,10 +40,10 @@ done
 echo "Frame RMSE " ${MM[*]}  > $OUT/measures
 echo "Frame PSNR " ${PP[*]} >> $OUT/measures
 
-# global psnr (from 6th frame)
+# global psnr (from 11th frame)
 SS=0
 n=0
-for i in $(seq $((FFR+5)) $LFR);
+for i in $(seq $((FFR+10)) $LFR);
 do
 	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
 	n=$((n+1))

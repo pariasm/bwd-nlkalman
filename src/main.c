@@ -17,7 +17,7 @@
 #define NLKALMAN
 
 // comment for distance threshold
-//#define K_SIMILAR_PATCHES
+#define K_SIMILAR_PATCHES
 
 #define max(a,b) \
 	({ __typeof__ (a) _a = (a); \
