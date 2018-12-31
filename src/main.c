@@ -470,7 +470,8 @@ struct nlkalman_params
 	int patch_sz;        // patch size
 	int search_sz;       // search window radius
 #ifdef K_SIMILAR_PATCHES
-	int num_patches;     // number of similar patches
+	int num_patches_x;   // number of similar patches spatial filtering
+	int num_patches_t;   // number of similar patches temporal filtering
 #else
 	float dista_th;      // patch distance threshold
 #endif
@@ -508,31 +509,33 @@ void nlkalman_default_params(struct nlkalman_params * p, float sigma)
 	 * might lead to a global decrease in psnr */
 #define DERFHD_PARAMS
 #ifdef DERFHD_PARAMS
-	if (p->patch_sz     < 0) p->patch_sz     = 8;  // not tuned
-	if (p->search_sz    < 0) p->search_sz    = 10; // not tuned
+	if (p->patch_sz      < 0) p->patch_sz      = 8;  // not tuned
+	if (p->search_sz     < 0) p->search_sz     = 10; // not tuned
  #ifndef K_SIMILAR_PATCHES
-	if (p->dista_th     < 0) p->dista_th     = .5*sigma + 15.0;
+	if (p->dista_th      < 0) p->dista_th      = .5*sigma + 15.0;
  #else
-	if (p->num_patches  < 0) p->num_patches  = 32;
+	if (p->num_patches_x < 0) p->num_patches_x = 32;
+	if (p->num_patches_t < 0) p->num_patches_t = 32;
  #endif
-	if (p->dista_lambda < 0) p->dista_lambda = 1.0;
-	if (p->beta_x       < 0) p->beta_x       = 3.0;
+	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0;
+	if (p->beta_x        < 0) p->beta_x        = 3.0;
  #ifdef NLKALMAN
-	if (p->beta_t       < 0) p->beta_t       = 0.05*sigma + 6.0;
+	if (p->beta_t        < 0) p->beta_t        = 0.05*sigma + 6.0;
  #else
-	if (p->beta_t       < 0) p->beta_t       = 4;
+	if (p->beta_t        < 0) p->beta_t        = 4;
  #endif
 #else // DERFCIF_PARAMS
-	if (p->patch_sz     < 0) p->patch_sz     = 8;  // not tuned
-	if (p->search_sz    < 0) p->search_sz    = 10; // not tuned
+	if (p->patch_sz      < 0) p->patch_sz      = 8;  // not tuned
+	if (p->search_sz     < 0) p->search_sz     = 10; // not tuned
  #ifndef K_SIMILAR_PATCHES
-	if (p->dista_th     < 0) p->dista_th     = (60. - 38.)*(sigma - 10.) + 38.0;
+	if (p->dista_th      < 0) p->dista_th      = (60. - 38.)*(sigma - 10.) + 38.0;
  #else
-	if (p->num_patches  < 0) p->num_patches  = 32
+	if (p->num_patches_x < 0) p->num_patches_x = 32
+	if (p->num_patches_t < 0) p->num_patches_t = 32
  #endif
-	if (p->dista_lambda < 0) p->dista_lambda = 1.0;
-	if (p->beta_x       < 0) p->beta_x       = 2.4;
-	if (p->beta_t       < 0) p->beta_t       = 4.5;
+	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0;
+	if (p->beta_x        < 0) p->beta_x        = 2.4;
+	if (p->beta_t        < 0) p->beta_t        = 4.5;
 #endif
 }
 
@@ -1374,7 +1377,8 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 		// gather spatio-temporal statistics: loop on search region [[[3
 		int np0 = 0; // number of similar patches with a  valid previous patch
 		int np1 = 0; // number of similar patches with no valid previous patch
-		if (prms.num_patches)
+		int num_patches = prev_p ? prms.num_patches_t : prms.num_patches_x;
+		if (num_patches)
 		{
 			const int wsz = prms.search_sz;
 			const int wx[2] = {max(px - wsz, 0), min(px + wsz, w - psz) + 1};
@@ -1440,7 +1444,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 				sorted_dists[i] = dists[i];
 
 			qsort(sorted_dists, (wx[1] - wx[0])*(wy[1] - wy[0]), sizeof*dists, float_cmp);
-			const float dist2_th = sorted_dists[prms.num_patches - 1];
+			const float dist2_th = sorted_dists[num_patches - 1];
 
 			// gather statistics using only k most similar patches [[[4
 			for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
@@ -1706,7 +1710,8 @@ int main(int argc, const char *argv[])
 #ifndef K_SIMILAR_PATCHES
 	prms.dista_th     = -1.;
 #else
-	prms.num_patches  = -1.;
+	prms.num_patches_x = -1.;
+	prms.num_patches_t = -1.;
 #endif
 	prms.beta_x       = -1.;
 	prms.beta_t       = -1.;
@@ -1729,7 +1734,8 @@ int main(int argc, const char *argv[])
 #ifndef K_SIMILAR_PATCHES
 		OPT_FLOAT  ( 0 , "dth"   , &prms.dista_th, "patch distance threshold"),
 #else
-		OPT_INTEGER('n', "npatches", &prms.num_patches, "number of similar patches"),
+		OPT_INTEGER('m', "npatches_x", &prms.num_patches_x, "number of similar patches spatial"),
+		OPT_INTEGER('n', "npatches_t", &prms.num_patches_t, "number of similar patches kalman"),
 #endif
 		OPT_FLOAT  ( 0 , "beta_x", &prms.beta_x, "noise multiplier in spatial filtering"),
 		OPT_FLOAT  ( 0 , "beta_t", &prms.beta_t, "noise multiplier in kalman filtering"),
@@ -1755,16 +1761,17 @@ int main(int argc, const char *argv[])
 		printf("parameters:\n");
 		printf("\tnoise  %f\n", sigma);
 		printf("\t%s-wise mode\n", prms.pixelwise ? "pixel" : "patch");
-		printf("\tpatch     %d\n", prms.patch_sz);
-		printf("\tsearch    %d\n", prms.search_sz);
+		printf("\tpatch      %d\n", prms.patch_sz);
+		printf("\tsearch     %d\n", prms.search_sz);
 #ifndef K_SIMILAR_PATCHES
-		printf("\tdth       %g\n", prms.dista_th);
+		printf("\tdth        %g\n", prms.dista_th);
 #else
-		printf("\tnpatches  %d\n", prms.num_patches);
+		printf("\tnpatches_x %d\n", prms.num_patches_x);
+		printf("\tnpatches_t %d\n", prms.num_patches_t);
 #endif
-		printf("\tlambda    %g\n", prms.dista_lambda);
-		printf("\tbeta_x    %g\n", prms.beta_x);
-		printf("\tbeta_t    %g\n", prms.beta_t);
+		printf("\tlambda     %g\n", prms.dista_lambda);
+		printf("\tbeta_x     %g\n", prms.beta_x);
+		printf("\tbeta_t     %g\n", prms.beta_t);
 		printf("\n");
 #ifdef WEIGHTED_AGGREGATION
 		printf("\tWEIGHTED_AGGREGATION ON\n");
