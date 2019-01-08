@@ -896,6 +896,7 @@ int float_cmp(const void * a, const void * b)
 	float fb = *(float *)b;
 	return (fa > fb) - (fa < fb);
 }
+#endif
 
 // denoise frame t (with k similar patches)
 void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
@@ -907,7 +908,9 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 	const int psz = prms.patch_sz;
 	const int step = prms.pixelwise ? 1 : psz/2;
 	const float sigma2 = sigma * sigma;
-//	const float dista_th2 = prms.dista_th * prms.dista_th;
+#ifndef K_SIMILAR_PATCHES
+	const float dista_th2 = prms.dista_th * prms.dista_th;
+#endif
 	const float beta_x  = prms.beta_x;
 	const float beta_t  = prms.beta_t;
 
@@ -983,8 +986,14 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 		// gather spatio-temporal statistics: loop on search region [[[3
 		int np0 = 0; // number of similar patches with a  valid previous patch
 		int np1 = 0; // number of similar patches with no valid previous patch
+#ifdef K_SIMILAR_PATCHES
+		const float dista_sigma2 = 0; // correcting noise in distance
 		int num_patches = prev_p ? prms.num_patches_t : prms.num_patches_x;
 		if (num_patches)
+#else
+		const float dista_sigma2 = 2*sigma2; // correcting noise in distance
+		if (dista_th2)
+#endif
 		{
 			const int wsz = prms.search_sz;
 			const int wx[2] = {max(px - wsz, 0), min(px + wsz, w - psz) + 1};
@@ -1026,8 +1035,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 						{
 							const float e1 = N1D0[c     ][hy][hx] - N1[hy][hx][c];
 							const float e0 = N1D0[c + ch][hy][hx] - D0[hy][hx][c];
-//							ww += l * (e1 * e1 - 2*sigma2) + (1 - l) * e0 * e0;
-							ww += l * e1 * e1 + (1 - l) * e0 * e0;
+							ww += l * (e1 * e1 - dista_sigma2) + (1 - l) * e0 * e0;
 						}
 					else
 					{
@@ -1035,8 +1043,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 						for (int c  = 0; c  < ch ; ++c )
 						{
 							const float e1 = N1D0[c][hy][hx] - N1[hy][hx][c];
-//							ww += e1 * e1 - 2*sigma2;
-							ww += e1 * e1;
+							ww += e1 * e1 - dista_sigma2;
 						}
 					}
 
@@ -1044,6 +1051,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 				dists[i] = max(ww / ((float)psz*psz*ch), 0);
 			}
 
+#ifdef K_SIMILAR_PATCHES
 			// sort dists and find distance to kth nearest patch [[[4
 			float sorted_dists[(wx[1] - wx[0])*(wy[1] - wy[0])];
 			for (int i = 0; i < (wx[1] - wx[0])*(wy[1] - wy[0]); ++i)
@@ -1051,7 +1059,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 			qsort(sorted_dists, (wx[1] - wx[0])*(wy[1] - wy[0]), sizeof*dists, float_cmp);
 
 			num_patches = min(num_patches, (wy[1]-wy[0]) * (wx[1]-wx[0]));
-			const float dist2_th = sorted_dists[num_patches - 1];
+			const float dista_th2 = sorted_dists[num_patches - 1];
 
 /*			for (int i = 0; i < (wy[1]-wy[0]) * (wx[1]-wx[0]); ++i)
 				printf("dists[%d] = %f\n", i, dists[i]);
@@ -1059,15 +1067,16 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 			for (int i = 0; i < (wy[1]-wy[0]) * (wx[1]-wx[0]); ++i)
 				printf("dists[%d] = %f\n", i, sorted_dists[i]);
 
-			printf("dist_th = %f\n", dist2_th);
+			printf("dist_th = %f\n", dista_th2);
 			printf("num_patches = %d\n", num_patches);
 
 			getchar();*/
+#endif
 
-			// gather statistics using only k most similar patches [[[4
+			// gather statistics with patches closer than dista_th2 [[[4
 			for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
 			for (int qx = wx[0]       ; qx < wx[1]; ++qx, ++i)
-			if (dists[i] <= dist2_th)
+			if (dists[i] <= dista_th2)
 			{
 				// store patch at q [[[5
 
@@ -1293,7 +1302,6 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 
 	return; // ]]]2
 }
-#endif
 
 // main funcion [[[1
 
