@@ -1444,6 +1444,8 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 			for (int i = 0; i < (wx[1] - wx[0])*(wy[1] - wy[0]); ++i)
 				sorted_dists[i] = dists[i];
 			qsort(sorted_dists, (wx[1] - wx[0])*(wy[1] - wy[0]), sizeof*dists, float_cmp);
+
+			num_patches = min(num_patches, (wy[1]-wy[0]) * (wx[1]-wx[0]));
 			const float dist2_th = sorted_dists[num_patches - 1];
 
 /*			for (int i = 0; i < (wy[1]-wy[0]) * (wx[1]-wx[0]); ++i)
