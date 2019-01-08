@@ -6,12 +6,12 @@
 #include <fftw3.h>      // computes dct
 #include <omp.h>
 
-#include <unistd.h>     // pause() for debugging
+#include <stdio.h>     // getchar() for debugging
 
 // some macros and data types [[[1
 
 // comment for uniform aggregation
-//#define WEIGHTED_AGGREGATION
+#define WEIGHTED_AGGREGATION
 
 // comment for recursive nl bayes (with dct)
 #define NLKALMAN
@@ -1282,7 +1282,7 @@ int float_cmp(const void * a, const void * b)
 	return (fa > fb) - (fa < fb);
 }
 
-// denoise frame t
+// denoise frame t (with k similar patches)
 void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 		int w, int h, int ch, float sigma,
 		const struct nlkalman_params prms, int frame)
@@ -1291,7 +1291,6 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 
 	const int psz = prms.patch_sz;
 	const int step = prms.pixelwise ? 1 : psz/2;
-//	const int step = prms.pixelwise ? 1 : psz;
 	const float sigma2 = sigma * sigma;
 //	const float dista_th2 = prms.dista_th * prms.dista_th;
 	const float beta_x  = prms.beta_x;
@@ -1442,9 +1441,19 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 			float sorted_dists[(wx[1] - wx[0])*(wy[1] - wy[0])];
 			for (int i = 0; i < (wx[1] - wx[0])*(wy[1] - wy[0]); ++i)
 				sorted_dists[i] = dists[i];
-
 			qsort(sorted_dists, (wx[1] - wx[0])*(wy[1] - wy[0]), sizeof*dists, float_cmp);
 			const float dist2_th = sorted_dists[num_patches - 1];
+
+/*			for (int i = 0; i < (wy[1]-wy[0]) * (wx[1]-wx[0]); ++i)
+				printf("dists[%d] = %f\n", i, dists[i]);
+
+			for (int i = 0; i < (wy[1]-wy[0]) * (wx[1]-wx[0]); ++i)
+				printf("dists[%d] = %f\n", i, sorted_dists[i]);
+
+			printf("dist_th = %f\n", dist2_th);
+			printf("num_patches = %d\n", num_patches);
+
+			getchar();*/
 
 			// gather statistics using only k most similar patches [[[4
 			for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
@@ -1513,7 +1522,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 				}
 			}
 
-			// normalize variance [[[4
+			// normalize variance
 			const float inp0 = np0 ? 1./(float)np0 : 0;
 			const float inp1 = 1./(float)np1;
 			for (int c  = 0; c  < ch ; ++c )
@@ -1529,7 +1538,6 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 					V01[c][hy][hx] *= inp0;
 				}
 			}
-
 		}
 		else // dista_th2 == 0
 		{
@@ -1608,7 +1616,11 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 
 				// filter
 				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
+
+//				printf("%d-%d V0 = %6.1f - V01 = %6.1f - a = %f\n", hy, hx, 
+//						V0[c][hy][hx], max(0.f, V01[c][hy][hx]-sigma2),a);
 			}
+//			getchar();
 		}
 		else // not enough patches with valid previous patch
 		{
@@ -1618,7 +1630,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
 			{
-				// prediction variance (substract sigma2 from transition variance)
+				// prediction variance (substract sigma2 from group variance)
 				float v = max(0.f, V1[c][hy][hx] - sigma2);
 
 				// wiener filter
