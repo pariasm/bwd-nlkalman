@@ -823,9 +823,9 @@ void nlkalman_frame_step2(float *deno1, float *nisy1, float *deno0, float *bsic1
 			{
 				// prediction variance (substract sigma2 from transition variance)
 #ifdef NLKALMAN
-				float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - 0*sigma2);
+				float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - sigma2);
 #else
-				float v = max(0.f, V01[c][hy][hx] - 0*sigma2);
+				float v = max(0.f, V01[c][hy][hx] - sigma2);
 #endif
 
 				// kalman gain
@@ -834,7 +834,8 @@ void nlkalman_frame_step2(float *deno1, float *nisy1, float *deno0, float *bsic1
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
 				// variance of filtered patch
-				vp += (1 - a * a) * v - a * a * sigma2;
+//				vp += (1 - a * a) * v - a * a * sigma2; XXX this seemed wrong
+				vp += (1 - a * a) * v + a * a * sigma2;
 
 				// filter
 				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
@@ -857,7 +858,7 @@ void nlkalman_frame_step2(float *deno1, float *nisy1, float *deno0, float *bsic1
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
 				// variance of filtered patch
-				vp += a * a * v;
+				vp += a * v; // XXX the following was wrong : vp += a * a * v;
 
 				/* thresholding instead of empirical Wiener filtering
 				float a = (hy != 0 || hx != 0) ?
@@ -1195,7 +1196,8 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
 				// variance of filtered patch
-				vp += (1 - a * a) * v - a * a * sigma2;
+//				vp += (1 - a * a) * v - a * a * sigma2; XXX this seemed wrong
+				vp += (1 - a * a) * v + a * a * sigma2;
 
 				// filter
 				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
@@ -1218,7 +1220,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
 				// variance of filtered patch
-				vp += a * a * v;
+				vp += a * v; // XXX the following was wrong : vp += a * a * v;
 
 				/* thresholding instead of empirical Wiener filtering
 				float a = (hy != 0 || hx != 0) ?
@@ -1612,7 +1614,8 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
 				// variance of filtered patch
-				vp += (1 - a * a) * v - a * a * sigma2;
+//				vp += (1 - a * a) * v - a * a * sigma2; XXX this seemed wrong
+				vp += (1 - a * a) * v + a * a * sigma2;
 
 				// filter
 				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
@@ -1639,7 +1642,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0,
 				if (a > 1) printf("a = %f v = %f ", a, v);
 
 				// variance of filtered patch
-				vp += a * a * v;
+				vp += a * v; // XXX the following was wrong : vp += a * a * v;
 
 				/* thresholding instead of empirical Wiener filtering
 				float a = (hy != 0 || hx != 0) ?
