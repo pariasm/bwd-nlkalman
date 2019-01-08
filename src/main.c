@@ -740,7 +740,8 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0, float *bsic1,
 				for (int hy = 0; hy < psz; ++hy)
 				for (int hx = 0; hx < psz; ++hx)
 				{
-					N1D0[c     ][hy][hx] =        n1[qy + hy][qx + hx][c];
+					N1D0[c     ][hy][hx] = b1   ? b1[qy + hy][qx + hx][c]
+					                            : n1[qy + hy][qx + hx][c];
 					N1D0[c + ch][hy][hx] = prev ? d0[qy + hy][qx + hx][c] : 0;
 				}
 
@@ -859,7 +860,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0, float *bsic1,
 			for (int hx = 0; hx < psz; ++hx)
 			{
 				// prediction variance (substract sigma2 from transition variance)
-				float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - sigma2);
+				float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - (b1 ? 0 : sigma2));
 
 				// kalman gain
 				float a = v / (v + beta_t * sigma2);
@@ -887,7 +888,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0, float *bsic1,
 			for (int hx = 0; hx < psz; ++hx)
 			{
 				// prediction variance (substract sigma2 from group variance)
-				float v = max(0.f, V1[c][hy][hx] - sigma2);
+				float v = max(0.f, V1[c][hy][hx] - (b1 ? 0 : sigma2) );
 
 				// wiener filter
 				float a = v / (v + beta_x * sigma2);
@@ -929,7 +930,7 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0, float *bsic1,
 					d1[py + hy][px + hx][c] += w * W[hy][hx] * N1D0[c][hy][hx];
 			}
 		}
-		else 
+		else
 			// pixel-wise denoising: aggregate only the central pixel
 			for (int c = 0; c < ch ; ++c )
 				d1[py + psz/2][px + psz/2][c] += N1D0[c][psz/2][psz/2];
@@ -939,8 +940,8 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0, float *bsic1,
 
 	// normalize output [[[2
 	if (aggr1)
-	for (int i = 0, j = 0; i < w*h; ++i) 
-	for (int c = 0; c < ch ; ++c, ++j) 
+	for (int i = 0, j = 0; i < w*h; ++i)
+	for (int c = 0; c < ch ; ++c, ++j)
 		deno1[j] /= aggr1[i];
 
 	// free allocated mem and quit
