@@ -541,8 +541,8 @@ int float_cmp(const void * a, const void * b)
 }
 #endif
 
-// denoise frame t (with k similar patches)
-void nlkalman_frame(float *deno1, float *nisy1, float *deno0, float *bsic1,
+// nl-kalman filtering of a frame (with k similar patches)
+void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic1,
 		int w, int h, int ch, float sigma,
 		const struct nlkalman_params prms, int frame)
 {
@@ -943,6 +943,369 @@ void nlkalman_frame(float *deno1, float *nisy1, float *deno0, float *bsic1,
 	for (int i = 0, j = 0; i < w*h; ++i)
 	for (int c = 0; c < ch ; ++c, ++j)
 		deno1[j] /= aggr1[i];
+
+	// free allocated mem and quit
+	dct_threads_destroy(dcts);
+	if (aggr1) free(aggr1);
+
+	return; // ]]]2
+}
+
+// nl-kalman smoothing of a frame (with k similar patches)
+void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic1,
+		int w, int h, int ch, float sigma,
+		const struct nlkalman_params prms, int frame)
+{
+	// definitions [[[2
+
+	const int psz = prms.patch_sz;
+	const int step = prms.pixelwise ? 1 : psz/2;
+	const float sigma2 = sigma * sigma;
+#ifndef K_SIMILAR_PATCHES
+	const float dista_th2 = prms.dista_th * prms.dista_th;
+#endif
+	const float beta_x  = prms.beta_x;
+	const float beta_t  = prms.beta_t;
+
+	// aggregation weights (not necessary for pixel-wise nlmeans)
+	float *aggr1 = prms.pixelwise ? NULL : malloc(w*h*sizeof(float));
+
+	// set output and aggregation weights to 0
+	for (int i = 0; i < w*h*ch; ++i) smoo1[i] = 0.;
+	if (aggr1) for (int i = 0; i < w*h; ++i) aggr1[i] = 0.;
+
+	// compute a window (to reduce blocking artifacts)
+	float *window = window_function("gaussian", psz);
+	float W[psz][psz];
+	for (int i = 0; i < psz; ++i)
+	for (int j = 0; j < psz; ++j)
+		W[i][j] = window[i*psz + j];
+	free(window);
+
+	// noisy and clean patches at point p (as VLAs in the stack!)
+	float F1[psz][psz][ch]; // noisy patch at position p in frame t
+	float S0[psz][psz][ch]; // denoised patch at p in frame t - 1
+
+	// wrap images with nice pointers to vlas
+	float (*a1)[w]     = (void *)aggr1;       // aggregation weights at t
+	float (*s1)[w][ch] = (void *)smoo1;       // denoised frame t (output)
+	const float (*s0)[w][ch] = (void *)smoo0; // denoised frame t-1
+	const float (*f1)[w][ch] = (void *)filt1; // noisy frame at t
+	const float (*b1)[w][ch] = (void *)bsic1; // basic estimate frame at t
+
+	// initialize dct workspaces (we will compute the dct of two patches)
+	float F1S0[2*ch][psz][psz]; // noisy patch at t and clean patch at t-1
+	struct dct_threads dcts[1];
+#ifdef _OPENMP
+	const int nthreads = omp_get_max_threads();
+#else
+	const int nthreads = 1;
+#endif
+	dct_threads_init(psz, psz, 1, 2*ch, nthreads, dcts); // 2D DCT
+//	dct_threads_init(psz, psz, 2, 1*ch, nthreads, dcts); // 3D DCT
+
+	// statistics
+	float M0 [ch][psz][psz]; // average patch at t-1
+	float V0 [ch][psz][psz]; // variance at t-1
+	float V01[ch][psz][psz]; // transition variance from t-1 to t
+	float M1 [ch][psz][psz]; // average patch at t
+	float V1 [ch][psz][psz]; // variance at t
+
+	// loop on image patches [[[2
+	for (int oy = 0; oy < psz; oy += step) // split in grids of non-overlapping
+	for (int ox = 0; ox < psz; ox += step) // patches (for parallelization)
+	#pragma omp parallel for private(F1S0,F1,S0,M0,V0,V01,M1,V1)
+	for (int py = oy; py < h - psz + 1; py += psz) // FIXME: boundary pixels
+	for (int px = ox; px < w - psz + 1; px += psz) // may not be denoised
+	{
+		//	load target patch [[[3
+		bool prev_p = s0;
+		for (int hy = 0; hy < psz; ++hy)
+		for (int hx = 0; hx < psz; ++hx)
+		{
+			if (prev_p && isnan(s0[py + hy][px + hx][0])) prev_p = false;
+			for (int c  = 0; c  < ch ; ++c )
+			{
+				S0[hy][hx][c] = (prev_p) ? s0[py + hy][px + hx][c] : 0.f;
+				F1[hy][hx][c] = (b1) ? b1[py + hy][px + hx][c]
+				                     : f1[py + hy][px + hx][c];
+
+				M0 [c][hy][hx] = 0.;
+				V0 [c][hy][hx] = 0.;
+				M1 [c][hy][hx] = 0.;
+				V1 [c][hy][hx] = 0.;
+				V01[c][hy][hx] = 0.;
+			}
+		}
+
+		// gather spatio-temporal statistics: loop on search region [[[3
+		int np0 = 0; // number of similar patches with a  valid previous patch
+		int np1 = 0; // number of similar patches with no valid previous patch
+#ifdef K_SIMILAR_PATCHES
+		int num_patches = prev_p ? prms.num_patches_t : prms.num_patches_x;
+		if (num_patches)
+#else
+		if (dista_th2)
+#endif
+		{
+			const int wsz = prms.search_sz;
+			const int wx[2] = {max(px - wsz, 0), min(px + wsz, w - psz) + 1};
+			const int wy[2] = {max(py - wsz, 0), min(py + wsz, h - psz) + 1};
+
+			// compute all distances [[[4
+			float dists[ (wy[1]-wy[0]) * (wx[1]-wx[0]) ];
+			for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
+			for (int qx = wx[0]       ; qx < wx[1]; ++qx, ++i)
+			{
+				// store patch at q
+
+				// check if the previous patch at q is valid
+				bool prev_q = s0;
+				if (prev_q)
+					for (int hy = 0; hy < psz; ++hy)
+					for (int hx = 0; hx < psz; ++hx)
+					if (prev_q && isnan(s0[qy + hy][qx + hx][0]))
+						prev_q = false;
+
+				const bool prev = prev_p && prev_q;
+
+				for (int c  = 0; c  < ch ; ++c )
+				for (int hy = 0; hy < psz; ++hy)
+				for (int hx = 0; hx < psz; ++hx)
+				{
+					F1S0[c     ][hy][hx] = b1   ? b1[qy + hy][qx + hx][c]
+					                            : f1[qy + hy][qx + hx][c];
+					F1S0[c + ch][hy][hx] = prev ? s0[qy + hy][qx + hx][c] : 0;
+				}
+
+				// compute patch distance
+				float ww = 0; // patch distance is saved here
+				const float l = prms.dista_lambda;
+				for (int hy = 0; hy < psz; ++hy)
+				for (int hx = 0; hx < psz; ++hx)
+					if (prev && l != 1)
+						// use noisy and denoised patches from previous frame
+						for (int c  = 0; c  < ch ; ++c )
+						{
+							const float e1 = F1S0[c     ][hy][hx] - F1[hy][hx][c];
+							const float e0 = F1S0[c + ch][hy][hx] - S0[hy][hx][c];
+							ww += l * e1 * e1 + (1 - l) * e0 * e0;
+						}
+					else
+					{
+						// use only noisy from current frame
+						for (int c  = 0; c  < ch ; ++c )
+						{
+							const float e1 = F1S0[c][hy][hx] - F1[hy][hx][c];
+							ww += e1 * e1;
+						}
+					}
+
+				// normalize distance by number of pixels in patch
+				dists[i] = max(ww / ((float)psz*psz*ch), 0);
+			}
+
+#ifdef K_SIMILAR_PATCHES
+			// sort dists and find distance to kth nearest patch [[[4
+			float sorted_dists[(wx[1] - wx[0])*(wy[1] - wy[0])];
+			for (int i = 0; i < (wx[1] - wx[0])*(wy[1] - wy[0]); ++i)
+				sorted_dists[i] = dists[i];
+			qsort(sorted_dists, (wx[1] - wx[0])*(wy[1] - wy[0]), sizeof*dists, float_cmp);
+
+			num_patches = min(num_patches, (wy[1]-wy[0]) * (wx[1]-wx[0]));
+			const float dista_th2 = sorted_dists[num_patches - 1];
+#endif
+
+			// gather statistics with patches closer than dista_th2 [[[4
+			for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
+			for (int qx = wx[0]       ; qx < wx[1]; ++qx, ++i)
+			if (dists[i] <= dista_th2)
+			{
+				// store patch at q [[[5
+
+				// check if the previous patch at q is valid
+				bool prev_q = s0;
+				if (prev_q)
+					for (int hy = 0; hy < psz; ++hy)
+					for (int hx = 0; hx < psz; ++hx)
+					if (prev_q && isnan(s0[qy + hy][qx + hx][0]))
+						prev_q = false;
+
+				const bool prev = prev_p && prev_q;
+
+				for (int c  = 0; c  < ch ; ++c )
+				for (int hy = 0; hy < psz; ++hy)
+				for (int hx = 0; hx < psz; ++hx)
+				{
+					F1S0[c     ][hy][hx] = b1   ? b1[qy + hy][qx + hx][c]
+					                            : f1[qy + hy][qx + hx][c];
+					F1S0[c + ch][hy][hx] = prev ? s0[qy + hy][qx + hx][c] : 0;
+				}
+
+				// update statistics [[[5
+				{
+					np1++;
+					np0 += prev ? 1 : 0;
+
+					// compute dct (output in F1S0)
+					dct_threads_forward((float *)F1S0, dcts);
+
+					// compute means and variances.
+					// to compute the variances in a single pass over the search
+					// region we use Welford's method.
+					const float inp0 = prev ? 1./(float)np0 : 0;
+					const float inp1 = 1./(float)np1;
+					for (int c  = 0; c  < ch ; ++c )
+					for (int hy = 0; hy < psz; ++hy)
+					for (int hx = 0; hx < psz; ++hx)
+					{
+						const float p = F1S0[c][hy][hx];
+						const float oldM1 = M1[c][hy][hx];
+						const float delta = p - oldM1;
+
+						M1[c][hy][hx] += delta * inp1;
+						V1[c][hy][hx] += delta * (p - M1[c][hy][hx]); 
+
+						if(prev)
+						{
+							float p = F1S0[c + ch][hy][hx];
+							const float oldM0 = M0[c][hy][hx];
+							const float delta = p - oldM0;
+
+							M0[c][hy][hx] += delta * inp0;
+							V0[c][hy][hx] += delta * (p - M0[c][hy][hx]);
+
+							p -= F1S0[c][hy][hx];
+							V01[c][hy][hx] += p*p;
+						}
+					}
+				}
+			}
+
+			// normalize variance
+			const float inp0 = np0 ? 1./(float)np0 : 0;
+			const float inp1 = 1./(float)np1;
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				V1[c][hy][hx] *= inp1;
+				if(np0)
+				{
+					V0 [c][hy][hx] *= inp0;
+					V01[c][hy][hx] *= inp0;
+				}
+			}
+		}
+		else // dista_th2 == 0
+		{
+			// local version: single point estimate of variances [[[4
+			//                the mean M1 is assumed to be 0
+
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				F1S0[c     ][hy][hx] =          F1[hy][hx][c];
+				F1S0[c + ch][hy][hx] = prev_p ? S0[hy][hx][c] : 0;
+			}
+
+			// compute dct (output in F1S0)
+			dct_threads_forward((float *)F1S0, dcts);
+
+			// patch statistics (point estimate)
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				float p = F1S0[c][hy][hx];
+				V1[c][hy][hx] = p * p;
+
+				if (prev_p)
+				{
+					p = F1S0[c + ch][hy][hx];
+					V0[c][hy][hx] = p * p;
+
+					p -= F1S0[c + ch][hy][hx];
+					V01[c][hy][hx] = p * p;
+				}
+			}//]]]4
+		}
+
+		// filter current patch [[[3
+
+		// load patch in memory for fftw
+		for (int c  = 0; c  < ch ; ++c )
+		for (int hy = 0; hy < psz; ++hy)
+		for (int hx = 0; hx < psz; ++hx)
+		{
+			F1S0[c     ][hy][hx] = (!b1)  ? f1[py + hy][px + hx][c]
+			                              : F1[hy][hx][c];
+			F1S0[c + ch][hy][hx] = prev_p ? S0[hy][hx][c] : 0;
+		}
+
+		// compute dct (computed in place in F1S0)
+		dct_threads_forward((float *)F1S0, dcts);
+
+		float vp = 0;
+		if (np0 > 0) // enough patches with a valid previous patch
+		{
+			// kalman-like temporal smoothing
+
+			for (int c  = 0; c  < ch ; ++c )
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				// kalman smoothing gain
+				float a = V1[c][hy][hx] / (V1[c][hy][hx] + V01[c][hy][hx]);
+
+				// variance of filtered patch
+				vp += (1 - a * a) * V1[c][hy][hx]
+				    + a * a * max(V1[c][hy][hx] - V01[c][hy][hx], 0.f);
+
+				// filter
+				F1S0[c][hy][hx] = (1 - a)*F1S0[c][hy][hx] + a*F1S0[c + ch][hy][hx];
+			}
+		}
+		else // not enough patches with valid previous patch
+		{
+			// leave filtered version, with small aggregation weights
+			vp = 1e-4;
+		}
+
+		// invert dct (output in F1S0)
+		dct_threads_inverse((float *)F1S0, dcts);
+
+		// aggregate denoised patch on output image [[[3
+		if (a1)
+		{
+#ifdef WEIGHTED_AGGREGATION
+			const float w = 1.f/vp;
+#else
+			const float w = 1.f;
+#endif
+			// patch-wise denoising: aggregate the whole denoised patch
+			for (int hy = 0; hy < psz; ++hy)
+			for (int hx = 0; hx < psz; ++hx)
+			{
+				a1[py + hy][px + hx] += w * W[hy][hx];
+				for (int c = 0; c < ch ; ++c )
+					s1[py + hy][px + hx][c] += w * W[hy][hx] * F1S0[c][hy][hx];
+			}
+		}
+		else
+			// pixel-wise denoising: aggregate only the central pixel
+			for (int c = 0; c < ch ; ++c )
+				s1[py + psz/2][px + psz/2][c] += F1S0[c][psz/2][psz/2];
+
+		// ]]]3
+	}
+
+	// normalize output [[[2
+	if (aggr1)
+	for (int i = 0, j = 0; i < w*h; ++i)
+	for (int c = 0; c < ch ; ++c, ++j)
+		smoo1[j] /= aggr1[i];
 
 	// free allocated mem and quit
 	dct_threads_destroy(dcts);
