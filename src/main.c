@@ -139,7 +139,7 @@ void bicubic_interpolation_nans(float *result,
 }
 
 static
-void warp_bicubic_inplace(float *imw, float *im, float *of, float *msk,
+void warp_bicubic(float *imw, float *im, float *of, float *msk,
 		int w, int h, int ch)
 {
 	// warp previous frame
@@ -157,15 +157,6 @@ void warp_bicubic_inplace(float *imw, float *im, float *of, float *msk,
 
 	return;
 }
-
-/* static
-float * warp_bicubic(float * im, float * of, int w, int h, int ch)
-{
-	// warp previous frame
-	float * im_w = malloc(w*h*ch * sizeof(float));
-	warp_bicubic_inplace(im_w, im, of, w, h, ch);
-	return im_w;
-} */
 
 // dct handler [[[1
 
@@ -1331,8 +1322,10 @@ int main(int argc, const char *argv[])
 	const char *nisy_path = NULL;
 	const char *deno_path = NULL;
 	const char *bsic_path = NULL;
-	const char *flow_path = NULL;
-	const char *occl_path = NULL;
+	const char *bflo_path = NULL;
+	const char *bocc_path = NULL;
+	const char *fflo_path = NULL;
+	const char *focc_path = NULL;
 	int fframe = 0, lframe = -1;
 	float sigma = 0.f;
 	bool verbose = false;
@@ -1355,8 +1348,10 @@ int main(int argc, const char *argv[])
 		OPT_HELP(),
 		OPT_GROUP("Algorithm options"),
 		OPT_STRING ('i', "nisy"  , &nisy_path, "noisy input path (printf format)"),
-		OPT_STRING ('o', "flow"  , &flow_path, "backward flow path (printf format)"),
-		OPT_STRING ('k', "occl"  , &occl_path, "flow occlusions mask (printf format)"),
+		OPT_STRING ('o', "bflow" , &bflo_path, "bwd flow path (printf format)"),
+		OPT_STRING ('k', "boccl" , &bocc_path, "bwd flow occlusions mask (printf format)"),
+		OPT_STRING ( 0 , "fflow" , &bflo_path, "fwd flow path (printf format)"),
+		OPT_STRING ( 0 , "foccl" , &bocc_path, "fwd flow occlusions mask (printf format)"),
 		OPT_STRING ('d', "deno"  , &deno_path, "denoised output path (printf format)"),
 		OPT_STRING ( 0 , "bsic"  , &bsic_path, "basic estimate output path (printf format)"),
 		OPT_INTEGER('f', "first" , &fframe, "first frame"),
@@ -1420,15 +1415,15 @@ int main(int argc, const char *argv[])
 			return EXIT_FAILURE;
 	}
 
-	// load optical flow
-	float * flow = NULL;
-	if (flow_path)
+	// load backward optical flow [[[3
+	float * bflo = NULL;
+	if (bflo_path)
 	{
-		if (verbose) printf("loading flow %s\n", flow_path);
+		if (verbose) printf("loading bwd flow %s\n", bflo_path);
 		int w1, h1, c1;
-		flow = vio_read_video_float_vec(flow_path, fframe, lframe, &w1, &h1, &c1);
+		bflo = vio_read_video_float_vec(bflo_path, fframe, lframe, &w1, &h1, &c1);
 
-		if (!flow)
+		if (!bflo)
 		{
 			if (nisy) free(nisy);
 			return EXIT_FAILURE;
@@ -1436,39 +1431,95 @@ int main(int argc, const char *argv[])
 
 		if (w*h != w1*h1 || c1 != 2)
 		{
-			fprintf(stderr, "Video and optical flow size missmatch\n");
+			fprintf(stderr, "Video and bwd optical flow size missmatch\n");
 			if (nisy) free(nisy);
-			if (flow) free(flow);
+			if (bflo) free(bflo);
 			return EXIT_FAILURE;
 		}
 	}
 
-	// load occlusion masks
-	float * occl = NULL;
-	if (flow_path && occl_path)
+	// load forward optical flow [[[3
+	float * fflo = NULL;
+	if (fflo_path)
 	{
-		if (verbose) printf("loading occl. mask %s\n", occl_path);
+		if (verbose) printf("loading bwd flow %s\n", fflo_path);
 		int w1, h1, c1;
-		occl = vio_read_video_float_vec(occl_path, fframe, lframe, &w1, &h1, &c1);
+		fflo = vio_read_video_float_vec(fflo_path, fframe, lframe, &w1, &h1, &c1);
 
-		if (!occl)
+		if (!fflo)
 		{
 			if (nisy) free(nisy);
-			if (flow) free(flow);
+			return EXIT_FAILURE;
+		}
+
+		if (w*h != w1*h1 || c1 != 2)
+		{
+			fprintf(stderr, "Video and bwd optical flow size missmatch\n");
+			if (nisy) free(nisy);
+			if (bflo) free(bflo);
+			if (fflo) free(fflo);
+			return EXIT_FAILURE;
+		}
+	}
+
+	// load backward occlusion masks [[[3
+	float * bocc = NULL;
+	if (bflo_path && bocc_path)
+	{
+		if (verbose) printf("loading bwd occl. mask %s\n", bocc_path);
+		int w1, h1, c1;
+		bocc = vio_read_video_float_vec(bocc_path, fframe, lframe, &w1, &h1, &c1);
+
+		if (!bocc)
+		{
+			if (nisy) free(nisy);
+			if (bflo) free(bflo);
+			if (fflo) free(fflo);
 			return EXIT_FAILURE;
 		}
 
 		if (w*h != w1*h1 || c1 != 1)
 		{
-			fprintf(stderr, "Video and occl. masks size missmatch\n");
+			fprintf(stderr, "Video and bwd occl. masks size missmatch\n");
 			if (nisy) free(nisy);
-			if (flow) free(flow);
-			if (occl) free(occl);
+			if (bflo) free(bflo);
+			if (fflo) free(fflo);
+			if (bocc) free(bocc);
+			return EXIT_FAILURE;
+		}
+	}
+
+	// load forward occlusion masks [[[3
+	float * focc = NULL;
+	if (fflo_path && focc_path)
+	{
+		if (verbose) printf("loading fwd occl. mask %s\n", focc_path);
+		int w1, h1, c1;
+		focc = vio_read_video_float_vec(focc_path, fframe, lframe, &w1, &h1, &c1);
+
+		if (!focc)
+		{
+			if (nisy) free(nisy);
+			if (bflo) free(bflo);
+			if (fflo) free(fflo);
+			if (bocc) free(bocc);
+			return EXIT_FAILURE;
+		}
+
+		if (w*h != w1*h1 || c1 != 1)
+		{
+			fprintf(stderr, "Video and fwd occl. masks size missmatch\n");
+			if (nisy) free(nisy);
+			if (bflo) free(bflo);
+			if (fflo) free(fflo);
+			if (bocc) free(bocc);
+			if (focc) free(focc);
 			return EXIT_FAILURE;
 		}
 	}
 
 	// run denoiser [[[2
+	char frame_name[512];
 	const int whc = w*h*c, wh2 = w*h*2;
 	float * deno = nisy;
 	float * warp0 = malloc(whc*sizeof(float));
@@ -1478,33 +1529,34 @@ int main(int argc, const char *argv[])
 	{
 		if (verbose) printf("processing frame %d\n", f);
 
-		// TODO compute optical flow if absent
-
-		// warp previous denoised frame
+		// warp previous denoised frame [[[3
 		if (f > fframe)
 		{
 			float * deno0 = deno + (f - 1 - fframe)*whc;
-			if (flow)
+			if (bflo)
 			{
-				float * flow0 = flow + (f - fframe)*wh2;
-				float * occl1 = occl ? occl + (f - fframe)*w*h : NULL;
-				warp_bicubic_inplace(warp0, deno0, flow0, occl1, w, h, c);
+				float * flow0 = bflo + (f - fframe)*wh2;
+				float * occl1 = bocc ? bocc + (f - fframe)*w*h : NULL;
+				warp_bicubic(warp0, deno0, flow0, occl1, w, h, c);
 			}
 			else
 				// copy without warping
 				memcpy(warp0, deno0, whc*sizeof(float));
 		}
 
-		// run denoising
+		// filtering [[[3
 		float *nisy1 = nisy + (f - fframe)*whc;
 		float *deno0 = (f > fframe) ? warp0 : NULL;
-		nlkalman_frame(bsic1, nisy1, deno0, NULL, w, h, c, sigma, prms, f);
+		nlkalman_filter_frame(bsic1, nisy1, deno0, NULL, w, h, c, sigma, prms, f);
 
-		vio_save_video_float_vec("/tmp/bsic-%03d.png", bsic1, f, f, w, h, c);
-
+		// filtering 2nd step [[[3
 		bool second_step = true;
 		if (second_step)
 		{
+			// save output
+			sprintf(frame_name, "/tmp/bsic-%03d.png", f);
+			iio_save_image_float_vec(frame_name, bsic1, w, h, c);
+
 			// second step
 			struct nlkalman_params prms2;
 			prms2.patch_sz     = prms.patch_sz; // -1 means automatic value
@@ -1519,14 +1571,63 @@ int main(int argc, const char *argv[])
 			prms2.beta_t       = 1.;
 			prms2.dista_lambda = prms.dista_lambda;
 			prms2.pixelwise = false;
-			nlkalman_frame(deno1, nisy1, deno0, bsic1, w, h, c, sigma, prms2, f);
+
+			nlkalman_filter_frame(deno1, nisy1, deno0, bsic1, w, h, c, sigma, prms2, f);
 			memcpy(nisy1, deno1, whc*sizeof(float));
+
 		}
 		else
 			memcpy(nisy1, bsic1, whc*sizeof(float));
 
 		// save output
-		vio_save_video_float_vec(deno_path, deno1, f, f, w, h, c);
+		sprintf(frame_name, deno_path, f);
+		iio_save_image_float_vec(frame_name, nisy1, w, h, c);
+
+		// smoothing [[[3
+		bool smoothing = true;
+		if (smoothing && f > fframe)
+		{
+			// point to previous frame
+			float *filt1 = deno + (f - 1 - fframe)*whc;
+
+			// warp to previous frame [[[3
+			float * smoo0 = deno + (f - fframe)*whc;
+			{
+				if (fflo)
+				{
+					float * flow0 = fflo + (f - 1 - fframe)*wh2;
+					float * occl0 = focc ? focc + (f - 1 - fframe)*w*h : NULL;
+					warp_bicubic(warp0, smoo0, flow0, occl0, w, h, c);
+				}
+				else
+					// copy without warping
+					memcpy(warp0, smoo0, whc*sizeof(float));
+
+				smoo0 = warp0;
+			}
+
+			// smoothing parameters
+			struct nlkalman_params prms2;
+			prms2.patch_sz     = prms.patch_sz; // -1 means automatic value
+			prms2.search_sz    = prms.search_sz;
+#ifdef K_SIMILAR_PATCHES
+			prms2.num_patches_x = prms.num_patches_x;
+			prms2.num_patches_t = prms.num_patches_t;
+#else
+			prms2.dista_th     = prms.dista_th;
+#endif
+			prms2.beta_x       = 2.;
+			prms2.beta_t       = 1.;
+			prms2.dista_lambda = prms.dista_lambda;
+			prms2.pixelwise = false;
+
+			nlkalman_smooth_frame(deno1, filt1, smoo0, NULL, w, h, c, sigma, prms2, f);
+			memcpy(filt1, deno1, whc*sizeof(float));
+
+			// save output
+			sprintf(frame_name, "/tmp/smoo-%03d.png", f-1);
+			iio_save_image_float_vec(frame_name, deno1, w, h, c);
+		}
 	}
 
 	// save output [[[2
@@ -1536,7 +1637,10 @@ int main(int argc, const char *argv[])
 	if (bsic1) free(bsic1);
 	if (warp0) free(warp0);
 	if (nisy) free(nisy);
-	if (flow) free(flow);
+	if (bflo) free(bflo);
+	if (bocc) free(bocc);
+	if (fflo) free(fflo);
+	if (focc) free(focc);
 
 	return EXIT_SUCCESS; // ]]]2
 }
