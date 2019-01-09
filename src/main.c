@@ -1553,7 +1553,7 @@ int main(int argc, const char *argv[])
 
 		// filtering 2nd step [[[3
 		bool second_step = true;
-		if (second_step)
+		if (second_step && f > fframe)
 		{
 			// save output
 			sprintf(frame_name, "/tmp/bsic-%03d.png", f);
