@@ -450,7 +450,7 @@ float * window_function(const char * type, int NN)
 
 
 
-// recursive nl-means algorithm [[[1
+// nl-kalman filtering [[[1
 
 // struct for storing the parameters of the algorithm
 struct nlkalman_params
@@ -820,7 +820,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 					p = N1D0[c + ch][hy][hx];
 					V0[c][hy][hx] = p * p;
 
-					p -= N1D0[c + ch][hy][hx];
+					p -= N1D0[c][hy][hx];
 					V01[c][hy][hx] = p * p;
 				}
 			}//]]]4
@@ -941,6 +941,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	return; // ]]]2
 }
+
+// nl-kalman smoothing [[[1
 
 // nl-kalman smoothing of a frame (with k similar patches)
 void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic1,
@@ -1217,7 +1219,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 					p = F1S0[c + ch][hy][hx];
 					V0[c][hy][hx] = p * p;
 
-					p -= F1S0[c + ch][hy][hx];
+					p -= F1S0[ch][hy][hx];
 					V01[c][hy][hx] = p * p;
 				}
 			}//]]]4
@@ -1252,7 +1254,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 
 				// variance of filtered patch
 				vp += (1 - a * a) * V1[c][hy][hx]
-				    + a * a * max(V1[c][hy][hx] - V01[c][hy][hx], 0.f);
+				    + a * a * max(V0[c][hy][hx] - V01[c][hy][hx], 0.f);
 
 				// filter
 				F1S0[c][hy][hx] = (1 - a)*F1S0[c][hy][hx] + a*F1S0[c + ch][hy][hx];
