@@ -833,7 +833,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 		for (int hy = 0; hy < psz; ++hy)
 		for (int hx = 0; hx < psz; ++hx)
 		{
-			N1D0[c     ][hy][hx] = (!b1)  ? n1[py + hy][px + hx][c]
+			N1D0[c     ][hy][hx] = (b1)   ? n1[py + hy][px + hx][c]
 			                              : N1[hy][hx][c];
 			N1D0[c + ch][hy][hx] = prev_p ? D0[hy][hx][c] : 0;
 		}
@@ -1232,7 +1232,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 		for (int hy = 0; hy < psz; ++hy)
 		for (int hx = 0; hx < psz; ++hx)
 		{
-			F1S0[c     ][hy][hx] = (!b1)  ? f1[py + hy][px + hx][c]
+			F1S0[c     ][hy][hx] = b1     ? f1[py + hy][px + hx][c]
 			                              : F1[hy][hx][c];
 			F1S0[c + ch][hy][hx] = prev_p ? S0[hy][hx][c] : 0;
 		}
