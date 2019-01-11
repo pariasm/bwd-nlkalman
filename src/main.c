@@ -8,6 +8,9 @@
 
 #include <stdio.h>     // getchar() for debugging
 
+//#define DEBUG_OUTPUT_FILTERING
+//#define DEBUG_OUTPUT_SMOOTHING
+
 // some macros and data types [[[1
 
 // comment for uniform aggregation
@@ -839,13 +842,121 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			N1D0[c + ch][hy][hx] = prev_p ? D0[hy][hx][c] : 0;
 		}
 
+#ifdef DEBUG_OUTPUT_FILTERING // [[[9
+		if (b1)
+		{
+			printf("Patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", N1D0[0][hy][hx]);
+				printf("\n");
+			}
+		}
+
+		if (b1)
+		{
+			printf("Previous patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", N1D0[1][hy][hx]);
+				printf("\n");
+			}
+		}
+#endif // ]]]
+
 		// compute dct (computed in place in N1D0)
 		dct_threads_forward((float *)N1D0, dcts);
+
+#ifdef DEBUG_OUTPUT_FILTERING // [[[9
+		if (b1)
+		{
+			printf("DCT Patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", N1D0[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("DCT previous Patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", N1D0[1][hy][hx]);
+				printf("\n");
+			}
+
+			printf("M1 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", M1[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("V1 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", V1[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("M0 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", M0[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("V0 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", V0[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("V01 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", V01[0][hy][hx]);
+				printf("\n");
+			}
+		}
+#endif // ]]]
 
 		float vp = 0;
 		if (np0 > 0) // enough patches with a valid previous patch
 		{
 			// "kalman"-like spatio-temporal denoising
+
+#ifdef DEBUG_OUTPUT_FILTERING // [[[9
+			if (b1)
+			{
+				printf("beta_t = %f - sigma2 = %f\n", beta_t, sigma2);
+				printf("Thresholded variances and filters at %d, %d\n", px, py);
+				int c  = 0;
+				for (int hy = 0; hy < psz; ++hy)
+				{
+					for (int hx = 0; hx < psz; ++hx)
+					{
+						// prediction variance (substract sigma2 from group variance)
+						float v = V0[c][hy][hx] + max(0.f, V01[c][hy][hx] - (b1 ? 0 : sigma2));
+
+						// wiener filter
+						float a = v / (v + beta_t * sigma2);
+
+						printf("%7.2f - %4.2f -- ", v, a);
+					}
+					printf("\n");
+				}
+			}
+#endif // ]]]
 
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
@@ -866,14 +977,33 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				// filter
 				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
 
-//				printf("%d-%d V0 = %6.1f - V01 = %6.1f - a = %f\n", hy, hx, 
-//						V0[c][hy][hx], max(0.f, V01[c][hy][hx]-sigma2),a);
 			}
-//			getchar();
 		}
 		else // not enough patches with valid previous patch
 		{
 			// spatial nl-dct using statistics in M1 V1
+
+#ifdef DEBUG_OUTPUT_FILTERING // [[[9
+			if (b1)
+			{
+				printf("Thresholded variances and filters at %d, %d\n", px, py);
+				int c  = 0;
+				for (int hy = 0; hy < psz; ++hy)
+				{
+					for (int hx = 0; hx < psz; ++hx)
+					{
+						// prediction variance (substract sigma2 from group variance)
+						float v = max(0.f, V1[c][hy][hx] - (b1 ? 0 : sigma2) );
+
+						// wiener filter
+						float a = v / (v + beta_x * sigma2);
+
+						printf("%7.2f - %4.2f -- ", v, a);
+					}
+					printf("\n");
+				}
+			}
+#endif // ]]]
 
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
@@ -902,8 +1032,35 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			}
 		}
 
+#ifdef DEBUG_OUTPUT_FILTERING // [[[9
+		if (b1)
+		{
+			printf("DCT of denoised patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", N1D0[0][hy][hx]);
+				printf("\n");
+			}
+		}
+#endif // ]]]
+
 		// invert dct (output in N1D0)
 		dct_threads_inverse((float *)N1D0, dcts);
+
+#ifdef DEBUG_OUTPUT_FILTERING // [[[9
+		if (b1)
+		{
+			printf("Denoised patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", N1D0[0][hy][hx]);
+				printf("\n");
+			}
+			getchar();
+		}
+#endif // ]]]
 
 		// aggregate denoised patch on output image [[[3
 		if (a1)
@@ -954,6 +1111,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 
 	const int psz = prms.patch_sz;
 	const int step = prms.pixelwise ? 1 : psz/2;
+//	const int step = psz;
 	const float sigma2 = sigma * sigma;
 #ifndef K_SIMILAR_PATCHES
 	const float dista_th2 = prms.dista_th * prms.dista_th;
@@ -1009,6 +1167,8 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 	// loop on image patches [[[2
 	for (int oy = 0; oy < psz; oy += step) // split in grids of non-overlapping
 	for (int ox = 0; ox < psz; ox += step) // patches (for parallelization)
+//	int oy = 0;psz/2;
+//	int ox = psz/2;
 	#pragma omp parallel for private(F1S0,F1,S0,M0,V0,V01,M1,V1)
 	for (int py = oy; py < h - psz + 1; py += psz) // FIXME: boundary pixels
 	for (int px = ox; px < w - psz + 1; px += psz) // may not be denoised
@@ -1239,13 +1399,117 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 			F1S0[c + ch][hy][hx] = prev_p ? S0[hy][hx][c] : 0;
 		}
 
+#ifdef DEBUG_OUTPUT_SMOOTHING // [[[9
+		//if (b1)
+		{
+			printf("Patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", F1S0[0][hy][hx]);
+				printf("\n");
+			}
+		}
+
+		//if (b1)
+		{
+			printf("Previous patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", F1S0[1][hy][hx]);
+				printf("\n");
+			}
+		}
+#endif // ]]]
+
 		// compute dct (computed in place in F1S0)
 		dct_threads_forward((float *)F1S0, dcts);
+
+#ifdef DEBUG_OUTPUT_SMOOTHING // [[[9
+		//if (b1)
+		{
+			printf("DCT Patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", F1S0[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("DCT previous Patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", F1S0[1][hy][hx]);
+				printf("\n");
+			}
+
+			printf("M1 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", M1[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("V1 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", V1[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("M0 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", M0[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("V0 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", V0[0][hy][hx]);
+				printf("\n");
+			}
+
+			printf("V01 at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", V01[0][hy][hx]);
+				printf("\n");
+			}
+		}
+#endif // ]]]
 
 		float vp = 0;
 		if (np0 > 0) // enough patches with a valid previous patch
 		{
 			// kalman-like temporal smoothing
+
+#ifdef DEBUG_OUTPUT_SMOOTHING // [[[9
+			//if (b1)
+			{
+				printf("beta_t = %f - sigma2 = %f\n", beta_t, sigma2);
+				printf("Filters at %d, %d\n", px, py);
+				int c  = 0;
+				for (int hy = 0; hy < psz; ++hy)
+				{
+					for (int hx = 0; hx < psz; ++hx)
+					{
+						// prediction variance (substract sigma2 from group variance)
+						float a = V1[c][hy][hx] / (V1[c][hy][hx] + V01[c][hy][hx]);
+						printf("%4.2f ", a);
+					}
+					printf("\n");
+				}
+			}
+#endif // ]]]
 
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
@@ -1268,8 +1532,36 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 			vp = 1e-4;
 		}
 
+#ifdef DEBUG_OUTPUT_SMOOTHING // [[[9
+		//if (b1)
+		{
+			printf("DCT of denoised patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", F1S0[0][hy][hx]);
+				printf("\n");
+			}
+		}
+#endif // ]]]
+
 		// invert dct (output in F1S0)
 		dct_threads_inverse((float *)F1S0, dcts);
+
+#ifdef DEBUG_OUTPUT_SMOOTHING // [[[9
+		//if (b1)
+		{
+			printf("Denoised patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", F1S0[0][hy][hx]);
+				printf("\n");
+			}
+			printf("posterior variance = %f\n", vp);
+			getchar();
+		}
+#endif // ]]]
 
 		// aggregate denoised patch on output image [[[3
 		if (a1)
