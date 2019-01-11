@@ -556,7 +556,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	if (aggr1) for (int i = 0; i < w*h; ++i) aggr1[i] = 0.;
 
 	// compute a window (to reduce blocking artifacts)
-	float *window = window_function("gaussian", psz);
+//	float *window = window_function("gaussian", psz);
+	float *window = window_function("constant", psz);
 	float W[psz][psz];
 	for (int i = 0; i < psz; ++i)
 	for (int j = 0; j < psz; ++j)
@@ -968,7 +969,8 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 	if (aggr1) for (int i = 0; i < w*h; ++i) aggr1[i] = 0.;
 
 	// compute a window (to reduce blocking artifacts)
-	float *window = window_function("gaussian", psz);
+//	float *window = window_function("gaussian", psz);
+	float *window = window_function("constant", psz);
 	float W[psz][psz];
 	for (int i = 0; i < psz; ++i)
 	for (int j = 0; j < psz; ++j)
