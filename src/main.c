@@ -1546,7 +1546,7 @@ int main(int argc, const char *argv[])
 				memcpy(warp0, deno0, whc*sizeof(float));
 		}
 
-		// filtering [[[3
+		// filtering 1st step [[[3
 		float *nisy1 = nisy + (f - fframe)*whc;
 		float *deno0 = (f > fframe) ? warp0 : NULL;
 		nlkalman_filter_frame(bsic1, nisy1, deno0, NULL, w, h, c, sigma, prms, f);
@@ -1561,18 +1561,18 @@ int main(int argc, const char *argv[])
 
 			// second step
 			struct nlkalman_params prms2;
-			prms2.patch_sz     = prms.patch_sz; // -1 means automatic value
-			prms2.search_sz    = prms.search_sz;
+			prms2.patch_sz      = prms.patch_sz; // -1 means automatic value
+			prms2.search_sz     = prms.search_sz;
 #ifdef K_SIMILAR_PATCHES
 			prms2.num_patches_x = prms.num_patches_x;
 			prms2.num_patches_t = prms.num_patches_t;
 #else
-			prms2.dista_th     = prms.dista_th;
+			prms2.dista_th      = prms.dista_th;
 #endif
-			prms2.beta_x       = 2.;
-			prms2.beta_t       = 1.;
-			prms2.dista_lambda = prms.dista_lambda;
-			prms2.pixelwise = false;
+			prms2.beta_x        = prms.beta_x;
+			prms2.beta_t        = prms.beta_t;
+			prms2.dista_lambda  = prms.dista_lambda;
+			prms2.pixelwise     = false;
 
 			nlkalman_filter_frame(deno1, nisy1, deno0, bsic1, w, h, c, sigma, prms2, f);
 			memcpy(nisy1, deno1, whc*sizeof(float));
@@ -1618,8 +1618,8 @@ int main(int argc, const char *argv[])
 #else
 			prms2.dista_th     = prms.dista_th;
 #endif
-			prms2.beta_x       = 2.;
-			prms2.beta_t       = 1.;
+			prms2.beta_x       = prms.beta_x;
+			prms2.beta_t       = prms.beta_t;
 			prms2.dista_lambda = prms.dista_lambda;
 			prms2.pixelwise = false;
 
