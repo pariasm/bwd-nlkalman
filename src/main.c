@@ -526,7 +526,22 @@ void nlkalman_default_params(struct nlkalman_params * p, float sigma)
 #endif
 }
 
+struct patch_distance
+{
+	int x;
+	int y;
+	int t;
+	float d; // patch distance
+};
+
 #ifdef K_SIMILAR_PATCHES
+int patch_distance_cmp(const void * a, const void * b)
+{
+	struct patch_distance * pda = (struct patch_distance *)a;
+	struct patch_distance * pdb = (struct patch_distance *)b;
+	return (pda->d > pdb->d) - (pda->d < pdb->d);
+}
+
 int float_cmp(const void * a, const void * b)
 {
 	float fa = *(float *)a;
@@ -640,7 +655,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			const int wy[2] = {max(py - wsz, 0), min(py + wsz, h - psz) + 1};
 
 			// compute all distances [[[4
-			float dists[ (wy[1]-wy[0]) * (wx[1]-wx[0]) ];
+//			float dists[ (wy[1]-wy[0]) * (wx[1]-wx[0]) ];
+			struct patch_distance pdists[ (wy[1]-wy[0]) * (wx[1]-wx[0]) ];
 			for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
 			for (int qx = wx[0]       ; qx < wx[1]; ++qx, ++i)
 			{
@@ -689,36 +705,38 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 					}
 
 				// normalize distance by number of pixels in patch
-				dists[i] = max(ww / ((float)psz*psz*ch), 0);
+				pdists[i].x = qx;
+				pdists[i].y = qy;
+				pdists[i].d = max(ww / ((float)psz*psz*ch), 0);
 			}
 
 #ifdef K_SIMILAR_PATCHES
-			// sort dists and find distance to kth nearest patch [[[4
-			float sorted_dists[(wx[1] - wx[0])*(wy[1] - wy[0])];
-			for (int i = 0; i < (wx[1] - wx[0])*(wy[1] - wy[0]); ++i)
-				sorted_dists[i] = dists[i];
-			qsort(sorted_dists, (wx[1] - wx[0])*(wy[1] - wy[0]), sizeof*dists, float_cmp);
-
+			// sort distances [[[4
+			qsort(pdists, (wx[1] - wx[0])*(wy[1] - wy[0]), sizeof*pdists, patch_distance_cmp);
 			num_patches = min(num_patches, (wy[1]-wy[0]) * (wx[1]-wx[0]));
-			const float dista_th2 = sorted_dists[num_patches - 1];
 
-/*			for (int i = 0; i < (wy[1]-wy[0]) * (wx[1]-wx[0]); ++i)
-				printf("dists[%d] = %f\n", i, dists[i]);
-
-			for (int i = 0; i < (wy[1]-wy[0]) * (wx[1]-wx[0]); ++i)
-				printf("dists[%d] = %f\n", i, sorted_dists[i]);
-
-			printf("dist_th = %f\n", dista_th2);
-			printf("num_patches = %d\n", num_patches);
-
-			getchar();*/
+#ifdef DEBUG_OUTPUT_FILTERING // [[[9
+//			for (int i = 0; i < (wy[1]-wy[0]) * (wx[1]-wx[0]); ++i)
+//				printf("pdists[%d] = %f - %d, %d\n", i, pdists[i].d,
+//				                                        pdists[i].x,
+//				                                        pdists[i].y);
+//			printf("num_patches = %d\n", num_patches);
+//			getchar();
+#endif // ]]]
+#else
+			int num_patches = (wy[1]-wy[0]) * (wx[1]-wx[0]);
 #endif
 
 			// gather statistics with patches closer than dista_th2 [[[4
-			for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
-			for (int qx = wx[0]       ; qx < wx[1]; ++qx, ++i)
-			if (dists[i] <= dista_th2)
+			for (int i = 0; i < num_patches; ++i)
 			{
+#ifndef K_SIMILAR_PATCHES
+				// skip rest of loop if distance is above threshold
+				if (pdists[i].d > dista_th2) continue;
+#endif
+				int qx = pdists[i].x;
+				int qy = pdists[i].y;
+
 				// store patch at q [[[5
 
 				// check if the previous patch at q is valid
@@ -795,10 +813,10 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				}
 			}
 		}
+		// local version: single point estimate of variances [[[4
+		//                the mean M1 is assumed to be 0
 		else // dista_th2 == 0
 		{
-			// local version: single point estimate of variances [[[4
-			//                the mean M1 is assumed to be 0
 
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
