@@ -630,9 +630,9 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			if (prev_p && isnan(d0[py + hy][px + hx][0])) prev_p = false;
 			for (int c  = 0; c  < ch ; ++c )
 			{
-				D0[hy][hx][c] = (prev_p) ? d0[py + hy][px + hx][c] : 0.f;
-				N1[hy][hx][c] = (b1) ? b1[py + hy][px + hx][c]
-				                     : n1[py + hy][px + hx][c];
+				D0[hy][hx][c] = prev_p ? d0[py + hy][px + hx][c] : 0.f;
+				N1[hy][hx][c] = b1     ? b1[py + hy][px + hx][c]
+				                       : n1[py + hy][px + hx][c];
 
 				M0 [c][hy][hx] = 0.;
 				M0V[c][hy][hx] = 0.;
@@ -803,6 +803,21 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 								M0[c][hy][hx] += (N1D0[c + ch][hy][hx] - M0[c][hy][hx]) * inp0;
 						}
 					}
+
+#ifdef DEBUG_OUTPUT_FILTERING
+					if (frame == 2)
+					{
+						printf("frame = %d\n", frame);
+						printf("[%d,%d] np0 = %d\n", qx, qy, np0);
+						for (int hy = 0; hy < psz; ++hy)
+						{
+							for (int hx = 0; hx < psz; ++hx)
+								printf("%7.2f ", M0[0][hy][hx]);
+							printf("\n");
+						}
+						getchar();
+					}
+#endif
 				}
 			}
 
@@ -863,13 +878,13 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 		for (int hy = 0; hy < psz; ++hy)
 		for (int hx = 0; hx < psz; ++hx)
 		{
-			N1D0[c     ][hy][hx] = (b1)   ? n1[py + hy][px + hx][c]
+			N1D0[c     ][hy][hx] = b1     ? n1[py + hy][px + hx][c]
 			                              : N1[hy][hx][c];
-			N1D0[c + ch][hy][hx] = prev_p ? D0[hy][hx][c] : 0;
+			N1D0[c + ch][hy][hx] = prev_p ? D0[hy][hx][c] : 0; //XXX
 		}
 
 #ifdef DEBUG_OUTPUT_FILTERING // [[[9
-		if (b1)
+		if (frame == 2)
 		{
 			printf("Patch at %d, %d\n", px, py);
 			for (int hy = 0; hy < psz; ++hy)
@@ -880,7 +895,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			}
 		}
 
-		if (b1)
+		if (frame == 2)
 		{
 			printf("Previous patch at %d, %d\n", px, py);
 			for (int hy = 0; hy < psz; ++hy)
@@ -896,7 +911,17 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 		dct_threads_forward((float *)N1D0, dcts);
 
 #ifdef DEBUG_OUTPUT_FILTERING // [[[9
-		if (b1)
+		if (frame == 2)
+		{
+			printf("DCT previous Patch at %d, %d\n", px, py);
+			for (int hy = 0; hy < psz; ++hy)
+			{
+				for (int hx = 0; hx < psz; ++hx)
+					printf("%7.2f ", N1D0[1][hy][hx]);
+				printf("\n");
+			}
+		}
+		if (frame == 2)
 		{
 			printf("DCT Patch at %d, %d\n", px, py);
 			for (int hy = 0; hy < psz; ++hy)
@@ -930,11 +955,11 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				printf("\n");
 			}
 
-			printf("M0 at %d, %d\n", px, py);
+			printf("M0V at %d, %d\n", px, py);
 			for (int hy = 0; hy < psz; ++hy)
 			{
 				for (int hx = 0; hx < psz; ++hx)
-					printf("%7.2f ", M0[0][hy][hx]);
+					printf("%7.2f ", M0V[0][hy][hx]);
 				printf("\n");
 			}
 
@@ -962,7 +987,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			// "kalman"-like spatio-temporal denoising
 
 #ifdef DEBUG_OUTPUT_FILTERING // [[[9
-			if (b1)
+		if (frame == 2)
 			{
 				printf("beta_t = %f - sigma2 = %f\n", beta_t, sigma2);
 				printf("Thresholded variances and filters at %d, %d\n", px, py);
