@@ -725,7 +725,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 //				                                        pdists[i].y);
 //			printf("num_patches = %d\n", num_patches);
 //			getchar();
-#endif // ]]]
+#endif // 9]]]
 #else
 			int num_patches = (wy[1]-wy[0]) * (wx[1]-wx[0]);
 #endif
@@ -801,8 +801,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 								M0[c][hy][hx] += (N1D0[c + ch][hy][hx] - M0[c][hy][hx]) * inp0;
 						}
 					}
-
-#ifdef DEBUG_OUTPUT_FILTERING
+#ifdef DEBUG_OUTPUT_FILTERING // [[[9
 					if (frame == 2)
 					{
 						printf("frame = %d\n", frame);
@@ -815,7 +814,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 						}
 						getchar();
 					}
-#endif
+#endif // 9]]]
 				}
 			}
 
@@ -903,7 +902,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				printf("\n");
 			}
 		}
-#endif // ]]]
+#endif // 9]]]
 
 		// compute dct (computed in place in N1D0)
 		dct_threads_forward((float *)N1D0, dcts);
@@ -977,7 +976,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				printf("\n");
 			}
 		}
-#endif // ]]]
+#endif // 9]]]
 
 		float vp = 0;
 		if (np0 > 0) // enough patches with a valid previous patch
@@ -985,7 +984,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			// "kalman"-like spatio-temporal denoising
 
 #ifdef DEBUG_OUTPUT_FILTERING // [[[9
-		if (frame == 2)
+			if (frame == 2)
 			{
 				printf("beta_t = %f - sigma2 = %f\n", beta_t, sigma2);
 				printf("Thresholded variances and filters at %d, %d\n", px, py);
@@ -1005,7 +1004,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 					printf("\n");
 				}
 			}
-#endif // ]]]
+#endif // 9]]]
 
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
@@ -1029,7 +1028,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 			}
 		}
-		else // not enough patches with valid previous patch
+		else // not enough patches with valid previous patch [[[4
 		{
 			// spatial nl-dct using statistics in M1 V1
 
@@ -1053,7 +1052,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 					printf("\n");
 				}
 			}
-#endif // ]]]
+#endif // 9]]]
 
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
@@ -1093,7 +1092,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				printf("\n");
 			}
 		}
-#endif // ]]]
+#endif // 9]]]
 
 		// invert dct (output in N1D0)
 		dct_threads_inverse((float *)N1D0, dcts);
@@ -1110,11 +1109,13 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			}
 			getchar();
 		}
-#endif // ]]]
+#endif // 9]]]
 
 		// aggregate denoised patch on output image [[[3
 		if (a1)
 		{
+			// patch-wise denoising: aggregate the whole denoised patch
+
 #ifdef WEIGHTED_AGGREGATION
 			const float w = 1.f/vp;
 #else
@@ -1470,7 +1471,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 				printf("\n");
 			}
 		}
-#endif // ]]]
+#endif // 9]]]
 
 		// compute dct (computed in place in F1S0)
 		dct_threads_forward((float *)F1S0, dcts);
@@ -1534,7 +1535,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 				printf("\n");
 			}
 		}
-#endif // ]]]
+#endif // 9]]]
 
 		float vp = 0;
 		if (np0 > 0) // enough patches with a valid previous patch
@@ -1558,7 +1559,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 					printf("\n");
 				}
 			}
-#endif // ]]]
+#endif // 9]]]
 
 			for (int c  = 0; c  < ch ; ++c )
 			for (int hy = 0; hy < psz; ++hy)
@@ -1592,7 +1593,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 				printf("\n");
 			}
 		}
-#endif // ]]]
+#endif // 9]]]
 
 		// invert dct (output in F1S0)
 		dct_threads_inverse((float *)F1S0, dcts);
@@ -1610,7 +1611,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 			printf("posterior variance = %f\n", vp);
 			getchar();
 		}
-#endif // ]]]
+#endif // 9]]]
 
 		// aggregate denoised patch on output image [[[3
 		if (a1)
