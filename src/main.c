@@ -618,7 +618,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	// loop on image patches [[[2
 	for (int oy = 0; oy < psz; oy += step) // split in grids of non-overlapping
 	for (int ox = 0; ox < psz; ox += step) // patches (for parallelization)
-	#pragma omp parallel for private(N1D0,N1,D0,M0,V0,V01,M1,V1)
+	#pragma omp parallel for private(N1D0,N1,D0,M0,V0,V01,M1,V1,M0V)
 	for (int py = oy; py < h - psz + 1; py += psz) // FIXME: boundary pixels
 	for (int px = ox; px < w - psz + 1; px += psz) // may not be denoised
 	{
