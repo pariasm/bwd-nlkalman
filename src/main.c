@@ -616,11 +616,9 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	float V1 [ch][psz][psz]; // variance at t
 
 	// loop on image patches [[[2
-	for (int oy = 0; oy < psz; oy += step) // split in grids of non-overlapping
-	for (int ox = 0; ox < psz; ox += step) // patches (for parallelization)
 	#pragma omp parallel for private(N1D0,N1,D0,M0,V0,V01,M1,V1,M0V)
-	for (int py = oy; py < h - psz + 1; py += psz) // FIXME: boundary pixels
-	for (int px = ox; px < w - psz + 1; px += psz) // may not be denoised
+	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
+	for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
 	{
 		//	load target patch [[[3
 		bool prev_p = d0;
@@ -1126,14 +1124,17 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
 			{
+				#pragma omp atomic
 				a1[py + hy][px + hx] += w * W[hy][hx];
 				for (int c = 0; c < ch ; ++c )
+					#pragma omp atomic
 					d1[py + hy][px + hx][c] += w * W[hy][hx] * N1D0[c][hy][hx];
 			}
 		}
 		else
 			// pixel-wise denoising: aggregate only the central pixel
 			for (int c = 0; c < ch ; ++c )
+				#pragma omp atomic
 				d1[py + psz/2][px + psz/2][c] += N1D0[c][psz/2][psz/2];
 
 		// ]]]3
@@ -1217,13 +1218,9 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 	float V1 [ch][psz][psz]; // variance at t
 
 	// loop on image patches [[[2
-	for (int oy = 0; oy < psz; oy += step) // split in grids of non-overlapping
-	for (int ox = 0; ox < psz; ox += step) // patches (for parallelization)
-//	int oy = 0;psz/2;
-//	int ox = psz/2;
 	#pragma omp parallel for private(F1S0,F1,S0,M0,V0,V01,M1,V1)
-	for (int py = oy; py < h - psz + 1; py += psz) // FIXME: boundary pixels
-	for (int px = ox; px < w - psz + 1; px += psz) // may not be denoised
+	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
+	for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
 	{
 		//	load target patch [[[3
 		bool prev_p = s0;
@@ -1627,14 +1624,17 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
 			{
+				#pragma omp atomic
 				a1[py + hy][px + hx] += w * W[hy][hx];
 				for (int c = 0; c < ch ; ++c )
+					#pragma omp atomic
 					s1[py + hy][px + hx][c] += w * W[hy][hx] * F1S0[c][hy][hx];
 			}
 		}
 		else
 			// pixel-wise denoising: aggregate only the central pixel
 			for (int c = 0; c < ch ; ++c )
+				#pragma omp atomic
 				s1[py + psz/2][px + psz/2][c] += F1S0[c][psz/2][psz/2];
 
 		// ]]]3
