@@ -647,7 +647,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 #ifdef K_SIMILAR_PATCHES
 		const float dista_sigma2 = 0; // correct noise in distance
 		int num_patches = prev_p ? prms.num_patches_t : prms.num_patches_x;
-		if (num_patches)
+		if (num_patches > 1)
 #else
 		const float dista_sigma2 = b1 ? 0 : 2*sigma2; // correct noise in distance
 		if (dista_th2)
@@ -1247,7 +1247,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 		int np1 = 0; // number of similar patches with no valid previous patch
 #ifdef K_SIMILAR_PATCHES
 		int num_patches = prev_p ? prms.num_patches_t : prms.num_patches_x;
-		if (num_patches)
+		if (num_patches > 1)
 #else
 		if (dista_th2)
 #endif
