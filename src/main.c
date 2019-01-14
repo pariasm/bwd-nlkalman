@@ -461,8 +461,9 @@ struct nlkalman_params
 	int patch_sz;        // patch size
 	int search_sz;       // search window radius
 #ifdef K_SIMILAR_PATCHES
-	int num_patches_x;   // number of similar patches spatial filtering
-	int num_patches_t;   // number of similar patches temporal filtering
+	int num_patches_x;     // number of similar patches spatial filtering
+	int num_patches_t;     // number of similar patches temporal filtering
+	int num_patches_tx;    // number of similar patches statial average in temporal filtering
 #else
 	float dista_th;      // patch distance threshold
 #endif
@@ -507,6 +508,7 @@ void nlkalman_default_params(struct nlkalman_params * p, float sigma)
  #else
 	if (p->num_patches_x < 0) p->num_patches_x = 32;
 	if (p->num_patches_t < 0) p->num_patches_t = 32;
+	if (p->num_patches_tx < 0) p->num_patches_tx = 1;
  #endif
 	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0;
 	if (p->beta_x        < 0) p->beta_x        = 3.0;
@@ -517,8 +519,9 @@ void nlkalman_default_params(struct nlkalman_params * p, float sigma)
  #ifndef K_SIMILAR_PATCHES
 	if (p->dista_th      < 0) p->dista_th      = (60. - 38.)*(sigma - 10.) + 38.0;
  #else
-	if (p->num_patches_x < 0) p->num_patches_x = 32
-	if (p->num_patches_t < 0) p->num_patches_t = 32
+	if (p->num_patches_x < 0) p->num_patches_x = 32;
+	if (p->num_patches_t < 0) p->num_patches_t = 32;
+	if (p->num_patches_tx < 0) p->num_patches_tx = 1;
  #endif
 	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0;
 	if (p->beta_x        < 0) p->beta_x        = 2.4;
@@ -605,7 +608,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 //	dct_threads_init(psz, psz, 2, 1*ch, nthreads, dcts); // 3D DCT
 
 	// statistics
-	float M0 [ch][psz][psz]; // average patch at t-1
+	float M0 [ch][psz][psz]; // average patch at t-1 for spatial filtering
+	float M0V[ch][psz][psz]; // average patch at t-1 for variance computation
 	float V0 [ch][psz][psz]; // variance at t-1
 	float V01[ch][psz][psz]; // transition variance from t-1 to t
 	float M1 [ch][psz][psz]; // average patch at t
@@ -631,6 +635,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				                     : n1[py + hy][px + hx][c];
 
 				M0 [c][hy][hx] = 0.;
+				M0V[c][hy][hx] = 0.;
 				V0 [c][hy][hx] = 0.;
 				M1 [c][hy][hx] = 0.;
 				V1 [c][hy][hx] = 0.;
@@ -785,14 +790,17 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 						if(prev)
 						{
 							float p = N1D0[c + ch][hy][hx];
-							const float oldM0 = M0[c][hy][hx];
-							const float delta = p - oldM0;
+							const float oldM0V = M0V[c][hy][hx];
+							const float delta = p - oldM0V;
 
-							M0[c][hy][hx] += delta * inp0;
-							V0[c][hy][hx] += delta * (p - M0[c][hy][hx]);
+							M0V[c][hy][hx] += delta * inp0;
+							V0[c][hy][hx] += delta * (p - M0V[c][hy][hx]);
 
 							p -= N1D0[c][hy][hx];
 							V01[c][hy][hx] += p*p;
+
+							if (np0 <= prms.num_patches_tx)
+								M0[c][hy][hx] += (N1D0[c + ch][hy][hx] - M0[c][hy][hx]) * inp0;
 						}
 					}
 				}
@@ -993,7 +1001,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				vp += (1 - a * a) * v + a * a * sigma2;
 
 				// filter
-				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
+//				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
+				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*M0[c][hy][hx];
 
 			}
 		}
@@ -1651,6 +1660,7 @@ int main(int argc, const char *argv[])
 #else
 	prms.num_patches_x = -1.;
 	prms.num_patches_t = -1.;
+	prms.num_patches_tx = -1.;
 #endif
 	prms.beta_x       = -1.;
 	prms.beta_t       = -1.;
@@ -1678,6 +1688,7 @@ int main(int argc, const char *argv[])
 #else
 		OPT_INTEGER('m', "npatches_x", &prms.num_patches_x, "number of similar patches spatial"),
 		OPT_INTEGER('n', "npatches_t", &prms.num_patches_t, "number of similar patches kalman"),
+		OPT_INTEGER('n', "npatches_tx", &prms.num_patches_tx, "number of similar patches kalman spatial average"),
 #endif
 		OPT_FLOAT  ( 0 , "beta_x", &prms.beta_x, "noise multiplier in spatial filtering"),
 		OPT_FLOAT  ( 0 , "beta_t", &prms.beta_t, "noise multiplier in kalman filtering"),
@@ -1710,6 +1721,7 @@ int main(int argc, const char *argv[])
 #else
 		printf("\tnpatches_x %d\n", prms.num_patches_x);
 		printf("\tnpatches_t %d\n", prms.num_patches_t);
+		printf("\tnpatches_tx %d\n", prms.num_patches_tx);
 #endif
 		printf("\tlambda     %g\n", prms.dista_lambda);
 		printf("\tbeta_x     %g\n", prms.beta_x);
@@ -1878,6 +1890,7 @@ int main(int argc, const char *argv[])
 #ifdef K_SIMILAR_PATCHES
 			prms2.num_patches_x = prms.num_patches_x;
 			prms2.num_patches_t = prms.num_patches_t;
+			prms2.num_patches_tx = prms.num_patches_tx;
 #else
 			prms2.dista_th      = prms.dista_th;
 #endif
@@ -1927,6 +1940,7 @@ int main(int argc, const char *argv[])
 #ifdef K_SIMILAR_PATCHES
 			prms2.num_patches_x = prms.num_patches_x;
 			prms2.num_patches_t = prms.num_patches_t;
+			prms2.num_patches_tx = prms.num_patches_tx;
 #else
 			prms2.dista_th     = prms.dista_th;
 #endif
