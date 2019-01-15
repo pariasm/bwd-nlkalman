@@ -1935,8 +1935,8 @@ int main(int argc, const char *argv[])
 		OPT_STRING ('i', "nisy"  , &nisy_path, "noisy input path (printf format)"),
 		OPT_STRING ('o', "bflow" , &bflo_path, "bwd flow path (printf format)"),
 		OPT_STRING ('k', "boccl" , &bocc_path, "bwd flow occlusions mask (printf format)"),
-		OPT_STRING ( 0 , "fflow" , &bflo_path, "fwd flow path (printf format)"),
-		OPT_STRING ( 0 , "foccl" , &bocc_path, "fwd flow occlusions mask (printf format)"),
+		OPT_STRING ( 0 , "fflow" , &fflo_path, "fwd flow path (printf format)"),
+		OPT_STRING ( 0 , "foccl" , &focc_path, "fwd flow occlusions mask (printf format)"),
 		OPT_STRING ('d', "deno"  , &deno_path, "denoised output path (printf format)"),
 		OPT_STRING ( 0 , "bsic"  , &bsic_path, "basic estimate output path (printf format)"),
 		OPT_INTEGER('f', "first" , &fframe, "first frame"),
@@ -2178,7 +2178,7 @@ int main(int argc, const char *argv[])
 			// point to previous frame
 			float *filt1 = deno + (f - 1 - fframe)*whc;
 
-			// warp to previous frame [[[3
+			// warp current frame to previous frame [[[4
 			float * smoo0 = deno + (f - fframe)*whc;
 			{
 				if (fflo)
@@ -2194,7 +2194,7 @@ int main(int argc, const char *argv[])
 				smoo0 = warp0;
 			}
 
-			// smoothing parameters
+			// run smoother [[[4
 			struct nlkalman_params prms2;
 			prms2.patch_sz     = prms.patch_sz; // -1 means automatic value
 			prms2.search_sz    = prms.search_sz;
