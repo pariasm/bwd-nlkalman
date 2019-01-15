@@ -1545,42 +1545,37 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 			const int wy[2] = {max(py - wsz, 0), min(py + wsz, h - psz) + 1};
 
 			// compute all distances [[[4
+			const float l = prms.dista_lambda;
 			float dists[ (wy[1]-wy[0]) * (wx[1]-wx[0]) ];
 			for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
 			for (int qx = wx[0]       ; qx < wx[1]; ++qx, ++i)
 			{
-				// store patch at q
-
+#ifdef LAMBDA_DISTANCE // slow patch distance [[[5
 				// check if the previous patch at q is valid
-				bool prev_q = s0;
-				if (prev_q)
-					for (int hy = 0; hy < psz; ++hy)
-					for (int hx = 0; hx < psz; ++hx)
-					if (prev_q && isnan(s0[qy + hy][qx + hx][0]))
-						prev_q = false;
-
-				const bool prev = prev_p && prev_q;
-
-				for (int c  = 0; c  < ch ; ++c )
-				for (int hy = 0; hy < psz; ++hy)
-				for (int hx = 0; hx < psz; ++hx)
+				bool prev = false;
+				if (l != 1)
 				{
-					F1S0[c     ][hy][hx] = b1   ? b1[qy + hy][qx + hx][c]
-					                            : f1[qy + hy][qx + hx][c];
-					F1S0[c + ch][hy][hx] = prev ? s0[qy + hy][qx + hx][c] : 0;
+					bool prev_q = s0;
+					if (prev_q)
+						for (int hy = 0; hy < psz; ++hy)
+						for (int hx = 0; hx < psz; ++hx)
+						if (prev_q && isnan(s0[qy + hy][qx + hx][0]))
+							prev_q = false;
+
+					prev = prev_p && prev_q;
 				}
 
 				// compute patch distance
 				float ww = 0; // patch distance is saved here
-				const float l = prms.dista_lambda;
 				for (int hy = 0; hy < psz; ++hy)
 				for (int hx = 0; hx < psz; ++hx)
-					if (prev && l != 1)
+					if (prev)
 						// use noisy and denoised patches from previous frame
 						for (int c  = 0; c  < ch ; ++c )
 						{
-							const float e1 = F1S0[c     ][hy][hx] - F1[hy][hx][c];
-							const float e0 = F1S0[c + ch][hy][hx] - S0[hy][hx][c];
+							const float e1 = b1 ? b1[qy + hy][qx + hx][c] - F1[hy][hx][c]
+							                    : f1[qy + hy][qx + hx][c] - F1[hy][hx][c];
+							const float e0 = s0[qy + hy][qx + hx][c] - S0[hy][hx][c];
 							ww += l * e1 * e1 + (1 - l) * e0 * e0;
 						}
 					else
@@ -1588,10 +1583,23 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 						// use only noisy from current frame
 						for (int c  = 0; c  < ch ; ++c )
 						{
-							const float e1 = F1S0[c][hy][hx] - F1[hy][hx][c];
+							const float e1 = b1 ? b1[qy + hy][qx + hx][c] - F1[hy][hx][c]
+							                    : f1[qy + hy][qx + hx][c] - F1[hy][hx][c];
 							ww += e1 * e1;
 						}
-					}
+					} // 5]]]
+#else // faster version of the distance (when lambda = 1)
+				// compute patch distance
+				float ww = 0; // patch distance is saved here
+				for (int hy = 0; hy < psz; ++hy)
+				for (int hx = 0; hx < psz; ++hx)
+				for (int c  = 0; c  < ch ; ++c )
+				{
+					const float e1 = b1 ? b1[qy + hy][qx + hx][c] - F1[hy][hx][c]
+					                    : f1[qy + hy][qx + hx][c] - F1[hy][hx][c];
+					ww += e1 * e1;
+				}
+#endif
 
 				// normalize distance by number of pixels in patch
 				dists[i] = max(ww / ((float)psz*psz*ch), 0);
