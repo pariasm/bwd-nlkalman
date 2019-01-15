@@ -576,10 +576,11 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// aggregation weights
 	float *aggr1 = malloc(w*h*sizeof(float));
+	int   *mask1 = malloc(w*h*sizeof(float));
 
 	// set output and aggregation weights to 0
 	for (int i = 0; i < w*h*ch; ++i) deno1[i] = 0.;
-	if (aggr1) for (int i = 0; i < w*h; ++i) aggr1[i] = 0.;
+	for (int i = 0; i < w*h; ++i) aggr1[i] = 0., mask1[i] = 0;
 
 	// compute a window (to reduce blocking artifacts)
 //	float *window = window_function("gaussian", psz);
@@ -595,6 +596,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	float D0[psz][psz][ch]; // denoised patch at p in frame t - 1
 
 	// wrap images with nice pointers to vlas
+	int   (*m1)[w]     = (void *)mask1;       // mask of processed patches at t
 	float (*a1)[w]     = (void *)aggr1;       // aggregation weights at t
 	float (*d1)[w][ch] = (void *)deno1;       // denoised frame t (output)
 	const float (*d0)[w][ch] = (void *)deno0; // denoised frame t-1
@@ -626,16 +628,22 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// loop on image patches [[[2
 	#pragma omp parallel for private(N1D0,N1,D0,M0,V0,V01,M1,V1,M0V)
-	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
+	for (int py = 0; py < h - psz + 1; py += step) // FIXME: bottom image border
 	{
 		// aggregation patch group
-		const int nagg = prms.num_patches_tx;
+		int nagg = prms.num_patches_tx;
 		float * patch_group = (float *)malloc(nagg*ch*psz*psz*sizeof*patch_group);
 		float (*PG)[ch][psz][psz] = (void *)patch_group;
 		struct patch_distance patch_group_coords[ nagg ];
-
-		for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
+		for (int px = 0; px < w - psz + 1; px += step) // FIXME: right image border
 		{
+			int mask_p;
+			#pragma omp atomic read
+			mask_p = m1[py][px];
+			if (mask_p) continue;
+
+			int nagg = prms.num_patches_tx;
+
 			// load target patch [[[3
 			bool prev_p = d0;
 			for (int hy = 0; hy < psz; ++hy)
@@ -888,6 +896,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			if (b1) dct_threads_forward((float *)PG, dcts_pg);
 
 			float vp = 0;
+			nagg = min(np0 ? np0 : np1, prms.num_patches_tx);
 			for (int n = 0; n < nagg; ++n)
 			if (np0 > 0) // enough patches with a valid previous patch [[[4
 			{
@@ -940,9 +949,9 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 			// aggregate denoised group on output image [[[3
 #ifdef WEIGHTED_AGGREGATION
-			const float w = 1.f/vp;
+			const float w = (d0 && !np0) ? 1e-6 : 1.f/vp;
 #else
-			const float w = 1.f;
+			const float w = (d0 && !np0) ? 1e-6 : 1.f;
 #endif
 			for (int n = 0; n < nagg; ++n)
 			{
@@ -957,6 +966,9 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 						#pragma omp atomic
 						d1[qy + hy][qx + hx][c] += w * W[hy][hx] * PG[n][c][hy][hx];
 				}
+
+				#pragma omp atomic
+				m1[qy][qx] += (d0 && !np0) ? 0 : 1;
 			}
 
 			// ]]]3
@@ -965,7 +977,6 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	}
 
 	// normalize output [[[2
-	if (aggr1)
 	for (int i = 0, j = 0; i < w*h; ++i)
 	for (int c = 0; c < ch ; ++c, ++j)
 		deno1[j] /= aggr1[i];
@@ -973,6 +984,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	// free allocated mem and quit
 	dct_threads_destroy(dcts);
 	if (aggr1) free(aggr1);
+	if (mask1) free(mask1);
 	dct_threads_destroy(dcts_pg);
 
 	return; // ]]]2
@@ -996,10 +1008,11 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// aggregation weights
 	float *aggr1 = malloc(w*h*sizeof(float));
+	int   *mask1 = malloc(w*h*sizeof(float));
 
 	// set output and aggregation weights to 0
 	for (int i = 0; i < w*h*ch; ++i) deno1[i] = 0.;
-	if (aggr1) for (int i = 0; i < w*h; ++i) aggr1[i] = 0.;
+	for (int i = 0; i < w*h; ++i) aggr1[i] = 0., mask1[i] = 0;
 
 	// compute a window (to reduce blocking artifacts)
 //	float *window = window_function("gaussian", psz);
@@ -1015,6 +1028,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	float D0[psz][psz][ch]; // denoised patch at p in frame t - 1
 
 	// wrap images with nice pointers to vlas
+	int   (*m1)[w]     = (void *)mask1;       // mask of processed patches at t
 	float (*a1)[w]     = (void *)aggr1;       // aggregation weights at t
 	float (*d1)[w][ch] = (void *)deno1;       // denoised frame t (output)
 	const float (*d0)[w][ch] = (void *)deno0; // denoised frame t-1
@@ -1056,8 +1070,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 		struct dct_threads dct_patch[1];
 		dct_threads_init(psz, psz, 1, num_images*ch, nthreads, dct_patch);
 		#pragma omp parallel for private(N1B1D0)
-		for (int py = 0; py < hp; ++py) // FIXME: boundary pixels
-		for (int px = 0; px < wp; ++px) // may not be denoised
+		for (int py = 0; py < hp; ++py)
+		for (int px = 0; px < wp; ++px)
 		{
 			// load target patch
 			bool prev_p = d0;
@@ -1086,16 +1100,23 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// loop on image patches [[[2
 	#pragma omp parallel for private(N1,D0,M0,V0,V01,M1,V1,M0V)
-	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
+	for (int py = 0; py < h - psz + 1; py += step) // FIXME: bottom image border
 	{
 		// aggregation patch group
-		const int nagg = prms.num_patches_tx;
+		int nagg = prms.num_patches_tx;
 		float * patch_group = (float *)malloc(nagg*ch*psz*psz*sizeof*patch_group);
 		float (*PG)[ch][psz][psz] = (void *)patch_group;
 		struct patch_distance patch_group_coords[ nagg ];
 
-		for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
+		for (int px = 0; px < w - psz + 1; px += step) // FIXME: right image border
 		{
+			int mask_p;
+			#pragma omp atomic read
+			mask_p = m1[py][px];
+			if (mask_p) continue;
+
+			int nagg = prms.num_patches_tx;
+
 			// load target patch [[[3
 			bool prev_p = d0;
 			for (int hy = 0; hy < psz; ++hy)
@@ -1323,6 +1344,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			// filter patch group [[[3
 
 			float vp = 0;
+			nagg = min(np0 ? np0 : np1, prms.num_patches_tx);
 			for (int n = 0; n < nagg; ++n)
 			if (np0 > 0) // enough patches with a valid previous patch [[[4
 			{
@@ -1375,9 +1397,9 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 			// aggregate denoised group on output image [[[3
 #ifdef WEIGHTED_AGGREGATION
-			const float w = 1.f/vp;
+			const float w = (d0 && !np0) ? 1e-6 : 1.f/vp;
 #else
-			const float w = 1.f;
+			const float w = (d0 && !np0) ? 1e-6 : 1.f;
 #endif
 			for (int n = 0; n < nagg; ++n)
 			{
@@ -1392,6 +1414,9 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 						#pragma omp atomic
 						d1[qy + hy][qx + hx][c] += w * W[hy][hx] * PG[n][c][hy][hx];
 				}
+
+				#pragma omp atomic
+				m1[qy][qx] += (d0 && !np0) ? 0 : 1;
 			}
 
 			// ]]]3
@@ -1400,13 +1425,13 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	}
 
 	// normalize output [[[2
-	if (aggr1)
 	for (int i = 0, j = 0; i < w*h; ++i)
 	for (int c = 0; c < ch ; ++c, ++j)
 		deno1[j] /= aggr1[i];
 
 	// free allocated mem and quit
 	if (aggr1) free(aggr1);
+	if (mask1) free(mask1);
 	dct_threads_destroy(dcts_pg);
 	if (dct_nisy1) free(dct_nisy1);
 	if (dct_deno0) free(dct_deno0);
