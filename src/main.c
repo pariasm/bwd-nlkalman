@@ -607,6 +607,10 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	dct_threads_init(psz, psz, 1, 2*ch, nthreads, dcts); // 2D DCT
 //	dct_threads_init(psz, psz, 2, 1*ch, nthreads, dcts); // 3D DCT
 
+	// dct transform for the whole group
+	struct dct_threads dcts_pg[1];
+	dct_threads_init(psz, psz, 1, prms.num_patches_tx*ch, nthreads, dcts_pg);
+
 	// statistics
 	float M0 [ch][psz][psz]; // average patch at t-1 for spatial filtering
 	float M0V[ch][psz][psz]; // average patch at t-1 for variance computation
@@ -618,6 +622,13 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	// loop on image patches [[[2
 	#pragma omp parallel for private(N1D0,N1,D0,M0,V0,V01,M1,V1,M0V)
 	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
+	{
+		// aggregation patch group
+		const int nagg = prms.num_patches_tx;
+		float * patch_group = (float *)malloc(nagg*ch*psz*psz*sizeof*patch_group);
+		float (*PG)[ch][psz][psz] = (void *)patch_group;
+		struct patch_distance patch_group_coords[ nagg ];
+
 	for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
 	{
 		// load target patch [[[3
@@ -754,13 +765,13 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 					N1D0[c + ch][hy][hx] = prev ? d0[qy + hy][qx + hx][c] : 0;
 				}
 
+				// compute dct (output in N1D0)
+				dct_threads_forward((float *)N1D0, dcts);
+
 				// update statistics [[[5
 				{
 					np1++;
 					np0 += prev ? 1 : 0;
-
-					// compute dct (output in N1D0)
-					dct_threads_forward((float *)N1D0, dcts);
 
 					// compute means and variances.
 					// to compute the variances in a single pass over the search
@@ -791,7 +802,22 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 							V01[c][hy][hx] += p*p;
 
 							if (np0 <= prms.num_patches_tx)
+							{
+								patch_group_coords[np0-1].x = qx;
+								patch_group_coords[np0-1].y = qy;
+//								patch_group_coords[np0-1].d = pdists[i].d;
 								M0[c][hy][hx] += (N1D0[c + ch][hy][hx] - M0[c][hy][hx]) * inp0;
+//								M0[c][hy][hx] += (N1D02[c][hy][hx] - M0[c][hy][hx]) * inp0;
+								PG[np0-1][c][hy][hx] = b1 ? n1[qy + hy][qx + hx][c]
+								                          : N1D0[c][hy][hx];
+							}
+						}
+						else if (np1 <= prms.num_patches_tx)
+						{
+							patch_group_coords[np1-1].x = qx;
+							patch_group_coords[np1-1].y = qy;
+//							patch_group_coords[np1-1].d = pdists[i].d;
+							PG[np1-1][c][hy][hx] = b1 ? n1[qy + hy][qx + hx][c] : N1D0[c][hy][hx];
 						}
 					}
 #ifdef DEBUG_OUTPUT_FILTERING // [[[9
@@ -848,6 +874,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			for (int hx = 0; hx < psz; ++hx)
 			{
 				float p = N1D0[c][hy][hx];
+				PG[0][c][hy][hx] = b1 ? n1[py + hy][px + hx][c] : p;
 				V1[c][hy][hx] = p * p;
 
 				if (prev_p)
@@ -855,23 +882,21 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 					p = N1D0[c + ch][hy][hx];
 					V0[c][hy][hx] = p * p;
 
+					M0[c][hy][hx] = p;
+
 					p -= N1D0[c][hy][hx];
 					V01[c][hy][hx] = p * p;
 				}
 			}//]]]4
 		}
 
-		// filter current patch [[[3
+		// filter patch group [[[3
 
-		// load patch in memory for fftw
-		for (int c  = 0; c  < ch ; ++c )
-		for (int hy = 0; hy < psz; ++hy)
-		for (int hx = 0; hx < psz; ++hx)
+		if (b1) dct_threads_forward((float *)PG, dcts_pg);
+
+		float vp = 0;
+		for (int n = 0; n < nagg; ++n)
 		{
-			N1D0[c     ][hy][hx] = b1     ? n1[py + hy][px + hx][c]
-			                              : N1[hy][hx][c];
-			N1D0[c + ch][hy][hx] = prev_p ? D0[hy][hx][c] : 0; //XXX
-		}
 
 #ifdef DEBUG_OUTPUT_FILTERING // [[[9
 		if (frame == 2)
@@ -896,9 +921,6 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			}
 		}
 #endif // 9]]]
-
-		// compute dct (computed in place in N1D0)
-		dct_threads_forward((float *)N1D0, dcts);
 
 #ifdef DEBUG_OUTPUT_FILTERING // [[[9
 		if (frame == 2)
@@ -971,8 +993,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 		}
 #endif // 9]]]
 
-		float vp = 0;
-		if (np0 > 0) // enough patches with a valid previous patch
+		if (np0 > 0) // enough patches with a valid previous patch [[[4
 		{
 			// "kalman"-like spatio-temporal denoising
 
@@ -1017,7 +1038,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 				// filter
 //				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*N1D0[c + ch][hy][hx];
-				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*M0[c][hy][hx];
+				PG[n][c][hy][hx] = a*PG[n][c][hy][hx] + (1 - a)*M0[c][hy][hx];
 
 			}
 		}
@@ -1070,7 +1091,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				vp += a;*/
 
 				// filter
-				N1D0[c][hy][hx] = a*N1D0[c][hy][hx] + (1 - a)*M1[c][hy][hx];
+				PG[n][c][hy][hx] = a*PG[n][c][hy][hx] + (1 - a)*M1[c][hy][hx];
 			}
 		}
 
@@ -1087,9 +1108,6 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 		}
 #endif // 9]]]
 
-		// invert dct (output in N1D0)
-		dct_threads_inverse((float *)N1D0, dcts);
-
 #ifdef DEBUG_OUTPUT_FILTERING // [[[9
 		if (b1)
 		{
@@ -1103,6 +1121,9 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			getchar();
 		}
 #endif // 9]]]
+		}
+
+		dct_threads_inverse((float *)PG, dcts_pg);
 
 		// aggregate denoised patch on output image [[[3
 		if (a1)
@@ -1114,15 +1135,19 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 #else
 			const float w = 1.f;
 #endif
-			// patch-wise denoising: aggregate the whole denoised patch
+			for (int n = 0; n < nagg; ++n)
+			{
+			int qx = patch_group_coords[n].x;
+			int qy = patch_group_coords[n].y;
 			for (int hy = 0; hy < psz; ++hy)
 			for (int hx = 0; hx < psz; ++hx)
 			{
 				#pragma omp atomic
-				a1[py + hy][px + hx] += w * W[hy][hx];
+				a1[qy + hy][qx + hx] += w * W[hy][hx];
 				for (int c = 0; c < ch ; ++c )
 					#pragma omp atomic
-					d1[py + hy][px + hx][c] += w * W[hy][hx] * N1D0[c][hy][hx];
+					d1[qy + hy][qx + hx][c] += w * W[hy][hx] * PG[n][c][hy][hx];
+			}
 			}
 		}
 		else
@@ -1132,6 +1157,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				d1[py + psz/2][px + psz/2][c] += N1D0[c][psz/2][psz/2];
 
 		// ]]]3
+	}
+	if (patch_group) free(patch_group);
 	}
 
 	// normalize output [[[2
