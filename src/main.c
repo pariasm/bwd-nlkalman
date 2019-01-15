@@ -1170,6 +1170,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	// free allocated mem and quit
 	dct_threads_destroy(dcts);
 	if (aggr1) free(aggr1);
+	dct_threads_destroy(dcts_pg);
 
 	return; // ]]]2
 }
