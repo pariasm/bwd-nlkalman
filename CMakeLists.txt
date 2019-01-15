@@ -10,6 +10,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wall -ggdb -fsanitize=address")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wall -ggdb -O6 -w -s -ffast-math -fno-finite-math-only -fomit-frame-pointer -fstrength-reduce")
 
 set(CMAKE_BUILD_TYPE Release)
+#set(CMAKE_BUILD_TYPE Debug)
 
 # cmake global ################################################################
 

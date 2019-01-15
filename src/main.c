@@ -556,7 +556,7 @@ int float_cmp(const void * a, const void * b)
 }
 #endif
 
-#define DCT_IMAGE
+//#define DCT_IMAGE
 #ifndef DCT_IMAGE
 // nl-kalman filtering of a frame (with k similar patches)
 void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic1,
@@ -1451,7 +1451,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 	// definitions [[[2
 
 	const int psz = prms.patch_sz;
-	const int step = prms.pixelwise ? 1 : psz/2;
+	const int step = psz/2;
 //	const int step = psz;
 	const float sigma2 = sigma * sigma;
 #ifndef K_SIMILAR_PATCHES
@@ -1461,7 +1461,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 	const float beta_t  = prms.beta_t;
 
 	// aggregation weights (not necessary for pixel-wise nlmeans)
-	float *aggr1 = prms.pixelwise ? NULL : malloc(w*h*sizeof(float));
+	float *aggr1 = malloc(w*h*sizeof(float));
 
 	// set output and aggregation weights to 0
 	for (int i = 0; i < w*h*ch; ++i) smoo1[i] = 0.;
@@ -1901,29 +1901,21 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 #endif // 9]]]
 
 		// aggregate denoised patch on output image [[[3
-		if (a1)
-		{
 #ifdef WEIGHTED_AGGREGATION
-			const float w = 1.f/vp;
+		const float w = 1.f/vp;
 #else
-			const float w = 1.f;
+		const float w = 1.f;
 #endif
-			// patch-wise denoising: aggregate the whole denoised patch
-			for (int hy = 0; hy < psz; ++hy)
-			for (int hx = 0; hx < psz; ++hx)
-			{
-				#pragma omp atomic
-				a1[py + hy][px + hx] += w * W[hy][hx];
-				for (int c = 0; c < ch ; ++c )
-					#pragma omp atomic
-					s1[py + hy][px + hx][c] += w * W[hy][hx] * F1S0[c][hy][hx];
-			}
-		}
-		else
-			// pixel-wise denoising: aggregate only the central pixel
+		// patch-wise denoising: aggregate the whole denoised patch
+		for (int hy = 0; hy < psz; ++hy)
+		for (int hx = 0; hx < psz; ++hx)
+		{
+			#pragma omp atomic
+			a1[py + hy][px + hx] += w * W[hy][hx];
 			for (int c = 0; c < ch ; ++c )
 				#pragma omp atomic
-				s1[py + psz/2][px + psz/2][c] += F1S0[c][psz/2][psz/2];
+				s1[py + hy][px + hx][c] += w * W[hy][hx] * F1S0[c][hy][hx];
+		}
 
 		// ]]]3
 	}
