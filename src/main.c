@@ -464,16 +464,15 @@ struct nlkalman_params
 	int patch_sz;        // patch size
 	int search_sz;       // search window radius
 #ifdef K_SIMILAR_PATCHES
-	int num_patches_x;     // number of similar patches spatial filtering
-	int num_patches_t;     // number of similar patches temporal filtering
-	int num_patches_tx;    // number of similar patches statial average in temporal filtering
+	int npatches_x;      // number of similar patches spatial filtering
+	int npatches_t;      // number of similar patches temporal filtering
+	int npatches_tagg;   // number of similar patches statial average in temporal filtering
 #else
 	float dista_th;      // patch distance threshold
 #endif
 	float dista_lambda;  // weight of current frame in patch distance
 	float beta_x;        // noise multiplier in spatial filtering
 	float beta_t;        // noise multiplier in kalman filtering
-	bool pixelwise;      // toggle pixel-wise nlmeans
 };
 
 // set default parameters as a function of sigma
@@ -509,9 +508,9 @@ void nlkalman_default_params(struct nlkalman_params * p, float sigma)
  #ifndef K_SIMILAR_PATCHES
 	if (p->dista_th      < 0) p->dista_th      = .5*sigma + 15.0;
  #else
-	if (p->num_patches_x < 0) p->num_patches_x = 32;
-	if (p->num_patches_t < 0) p->num_patches_t = 32;
-	if (p->num_patches_tx < 0) p->num_patches_tx = 1;
+	if (p->npatches_x    < 0) p->npatches_x    = 32;
+	if (p->npatches_t    < 0) p->npatches_t    = 32;
+	if (p->npatches_tagg < 0) p->npatches_tagg = 1;
  #endif
 	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0;
 	if (p->beta_x        < 0) p->beta_x        = 3.0;
@@ -522,9 +521,9 @@ void nlkalman_default_params(struct nlkalman_params * p, float sigma)
  #ifndef K_SIMILAR_PATCHES
 	if (p->dista_th      < 0) p->dista_th      = (60. - 38.)*(sigma - 10.) + 38.0;
  #else
-	if (p->num_patches_x < 0) p->num_patches_x = 32;
-	if (p->num_patches_t < 0) p->num_patches_t = 32;
-	if (p->num_patches_tx < 0) p->num_patches_tx = 1;
+	if (p->npatches_x    < 0) p->npatches_x    = 32;
+	if (p->npatches_t    < 0) p->npatches_t    = 32;
+	if (p->npatches_tagg < 0) p->npatches_tagg = 1;
  #endif
 	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0;
 	if (p->beta_x        < 0) p->beta_x        = 2.4;
@@ -616,7 +615,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// dct transform for the whole group
 	struct dct_threads dcts_pg[1];
-	dct_threads_init(psz, psz, 1, prms.num_patches_tx*ch, nthreads, dcts_pg);
+	dct_threads_init(psz, psz, 1, prms.npatches_tagg*ch, nthreads, dcts_pg);
 
 	// statistics
 	float M0 [ch][psz][psz]; // average patch at t-1 for spatial filtering
@@ -631,7 +630,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	for (int py = 0; py < h - psz + 1; py += step) // FIXME: bottom image border
 	{
 		// aggregation patch group
-		int nagg = prms.num_patches_tx;
+		int nagg = prms.npatches_tagg;
 		float * patch_group = (float *)malloc(nagg*ch*psz*psz*sizeof*patch_group);
 		float (*PG)[ch][psz][psz] = (void *)patch_group;
 		struct patch_distance patch_group_coords[ nagg ];
@@ -643,7 +642,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			mask_p = m1[py][px];
 			if (mask_p) continue;
 
-			int nagg = prms.num_patches_tx;
+			int nagg = prms.npatches_tagg;
 
 			// load target patch [[[3
 			bool prev_p = d0;
@@ -671,7 +670,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			int np1 = 0; // number of similar patches with no valid previous patch
 #ifdef K_SIMILAR_PATCHES
 			const float dista_sigma2 = 0; // correct noise in distance
-			int num_patches = prev_p ? prms.num_patches_t : prms.num_patches_x;
+			int num_patches = prev_p ? prms.npatches_t : prms.npatches_x;
 			if (num_patches > 1)
 #else
 			const float dista_sigma2 = b1 ? 0 : 2*sigma2; // correct noise in distance
@@ -820,7 +819,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 								p -= N1D0[c][hy][hx];
 								V01[c][hy][hx] += p*p;
 
-								if (np0 <= prms.num_patches_tx)
+								if (np0 <= prms.npatches_tagg)
 								{
 									patch_group_coords[np0-1].x = qx;
 									patch_group_coords[np0-1].y = qy;
@@ -829,7 +828,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 									                          : N1D0[c][hy][hx];
 								}
 							}
-							else if (np1 <= prms.num_patches_tx)
+							else if (np1 <= prms.npatches_tagg)
 							{
 								patch_group_coords[np1-1].x = qx;
 								patch_group_coords[np1-1].y = qy;
@@ -897,7 +896,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			if (b1) dct_threads_forward((float *)PG, dcts_pg);
 
 			float vp = 0;
-			nagg = min(np0 ? np0 : np1, prms.num_patches_tx);
+			nagg = min(np0 ? np0 : np1, prms.npatches_tagg);
 			for (int n = 0; n < nagg; ++n)
 			if (np0 > 0) // enough patches with a valid previous patch [[[4
 			{
@@ -1045,7 +1044,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// dct transform for the patch group
 	struct dct_threads dcts_pg[1];
-	dct_threads_init(psz, psz, 1, prms.num_patches_tx*ch, nthreads, dcts_pg);
+	dct_threads_init(psz, psz, 1, prms.npatches_tagg*ch, nthreads, dcts_pg);
 
 	// statistics
 	float M0 [ch][psz][psz]; // average patch at t-1 for spatial filtering
@@ -1104,7 +1103,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	for (int py = 0; py < h - psz + 1; py += step) // FIXME: bottom image border
 	{
 		// aggregation patch group
-		int nagg = prms.num_patches_tx;
+		int nagg = prms.npatches_tagg;
 		float * patch_group = (float *)malloc(nagg*ch*psz*psz*sizeof*patch_group);
 		float (*PG)[ch][psz][psz] = (void *)patch_group;
 		struct patch_distance patch_group_coords[ nagg ];
@@ -1116,7 +1115,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			mask_p = m1[py][px];
 			if (mask_p) continue;
 
-			int nagg = prms.num_patches_tx;
+			int nagg = prms.npatches_tagg;
 
 			// load target patch [[[3
 			bool prev_p = d0;
@@ -1144,7 +1143,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			int np1 = 0; // number of similar patches with no valid previous patch
 #ifdef K_SIMILAR_PATCHES
 			const float dista_sigma2 = 0; // correct noise in distance
-			int num_patches = prev_p ? prms.num_patches_t : prms.num_patches_x;
+			int num_patches = prev_p ? prms.npatches_t : prms.npatches_x;
 			if (num_patches > 1)
 #else
 			const float dista_sigma2 = b1 ? 0 : 2*sigma2; // correct noise in distance
@@ -1284,7 +1283,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 								p -= N1[c][hy][hx];
 								V01[c][hy][hx] += p*p;
 
-								if (np0 <= prms.num_patches_tx)
+								if (np0 <= prms.npatches_tagg)
 								{
 									patch_group_coords[np0-1].x = qx;
 									patch_group_coords[np0-1].y = qy;
@@ -1293,7 +1292,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 									                          : N1[c][hy][hx];
 								}
 							}
-							else if (np1 <= prms.num_patches_tx)
+							else if (np1 <= prms.npatches_tagg)
 							{
 								patch_group_coords[np1-1].x = qx;
 								patch_group_coords[np1-1].y = qy;
@@ -1345,7 +1344,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			// filter patch group [[[3
 
 			float vp = 0;
-			nagg = min(np0 ? np0 : np1, prms.num_patches_tx);
+			nagg = min(np0 ? np0 : np1, prms.npatches_tagg);
 			for (int n = 0; n < nagg; ++n)
 			if (np0 > 0) // enough patches with a valid previous patch [[[4
 			{
@@ -1503,7 +1502,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 
 	// dct transform for the whole group
 	struct dct_threads dcts_pg[1];
-	dct_threads_init(psz, psz, 1, prms.num_patches_tx*ch, nthreads, dcts_pg);
+	dct_threads_init(psz, psz, 1, prms.npatches_tagg*ch, nthreads, dcts_pg);
 
 	// statistics
 	float M0 [ch][psz][psz]; // average patch at t-1
@@ -1517,7 +1516,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
 	{
 		// aggregation patch group
-		int nagg = prms.num_patches_tx;
+		int nagg = prms.npatches_tagg;
 		float * patch_group0 = (float *)malloc(nagg*ch*psz*psz*sizeof(float));
 		float * patch_group1 = (float *)malloc(nagg*ch*psz*psz*sizeof(float));
 		float (*PG0)[ch][psz][psz] = (void *)patch_group0;
@@ -1531,7 +1530,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 			mask_p = m1[py][px];
 			if (mask_p) continue;
 
-			int nagg = prms.num_patches_tx;
+			int nagg = prms.npatches_tagg;
 
 			// load target patch [[[3
 			bool prev_p = s0;
@@ -1557,7 +1556,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 			int np0 = 0; // number of similar patches with a  valid previous patch
 			int np1 = 0; // number of similar patches with no valid previous patch
 #ifdef K_SIMILAR_PATCHES
-			int num_patches = prev_p ? prms.num_patches_t : prms.num_patches_x;
+			int num_patches = prev_p ? prms.npatches_t : prms.npatches_x;
 			if (num_patches > 1)
 #else
 			if (dista_th2)
@@ -1705,7 +1704,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 								p -= F1S0[c][hy][hx];
 								V01[c][hy][hx] += p*p;
 
-								if (np0 <= prms.num_patches_tx)
+								if (np0 <= prms.npatches_tagg)
 								{
 									patch_group_coords[np0-1].x = qx;
 									patch_group_coords[np0-1].y = qy;
@@ -1773,7 +1772,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 			if (b1) dct_threads_forward((float *)PG1, dcts_pg);
 
 			float vp = 0;
-			nagg = min(np0, prms.num_patches_tx);
+			nagg = min(np0, prms.npatches_tagg);
 			if (np0 > 0) // enough patches with a valid previous patch
 			for (int n = 0; n < nagg; ++n)
 			{
@@ -1924,25 +1923,56 @@ int main(int argc, const char *argv[])
 	int fframe = 0, lframe = -1;
 	float sigma = 0.f;
 	bool verbose = false;
-	struct nlkalman_params prms;
-	prms.patch_sz     = -1; // -1 means automatic value
-	prms.search_sz    = -1;
+
+	// first filtering options
+	struct nlkalman_params f1_prms;
+	f1_prms.patch_sz      = -1; // -1 means automatic value
+	f1_prms.search_sz     = -1;
 #ifndef K_SIMILAR_PATCHES
-	prms.dista_th     = -1.;
+	f1_prms.dista_th      = -1.;
 #else
-	prms.num_patches_x = -1.;
-	prms.num_patches_t = -1.;
-	prms.num_patches_tx = -1.;
+	f1_prms.npatches_x    = -1.;
+	f1_prms.npatches_t    = -1.;
+	f1_prms.npatches_tagg = -1.;
 #endif
-	prms.beta_x       = -1.;
-	prms.beta_t       = -1.;
-	prms.dista_lambda = -1.;
-	prms.pixelwise = false;
+	f1_prms.beta_x        = -1.;
+	f1_prms.beta_t        = -1.;
+	f1_prms.dista_lambda  = -1.;
+
+	// second filtering options
+	struct nlkalman_params f2_prms;
+	f2_prms.patch_sz      = -1; // -1 means automatic value
+	f2_prms.search_sz     = -1;
+#ifndef K_SIMILAR_PATCHES
+	f2_prms.dista_th      = -1.;
+#else
+	f2_prms.npatches_x    = -1.;
+	f2_prms.npatches_t    = -1.;
+	f2_prms.npatches_tagg = -1.;
+#endif
+	f2_prms.beta_x        = -1.;
+	f2_prms.beta_t        = -1.;
+	f2_prms.dista_lambda  = -1.;
+
+	// smoothing options
+	struct nlkalman_params s1_prms;
+	s1_prms.patch_sz      = -1; // -1 means automatic value
+	s1_prms.search_sz     = -1;
+#ifndef K_SIMILAR_PATCHES
+	s1_prms.dista_th      = -1.;
+#else
+	s1_prms.npatches_x    = -1.;
+	s1_prms.npatches_t    = -1.;
+	s1_prms.npatches_tagg = -1.;
+#endif
+	s1_prms.beta_x        = -1.;
+	s1_prms.beta_t        = -1.;
+	s1_prms.dista_lambda  = -1.;
 
 	// configure command line parser
 	struct argparse_option options[] = {
 		OPT_HELP(),
-		OPT_GROUP("Algorithm options"),
+		OPT_GROUP("Data i/o options"),
 		OPT_STRING ('i', "nisy"  , &nisy_path, "noisy input path (printf format)"),
 		OPT_STRING ('o', "bflow" , &bflo_path, "bwd flow path (printf format)"),
 		OPT_STRING ('k', "boccl" , &bocc_path, "bwd flow occlusions mask (printf format)"),
@@ -1953,19 +1983,47 @@ int main(int argc, const char *argv[])
 		OPT_INTEGER('f', "first" , &fframe, "first frame"),
 		OPT_INTEGER('l', "last"  , &lframe , "last frame"),
 		OPT_FLOAT  ('s', "sigma" , &sigma, "noise standard dev"),
-		OPT_INTEGER('p', "patch" , &prms.patch_sz, "patch size"),
-		OPT_INTEGER('w', "search", &prms.search_sz, "search region radius"),
+
+		OPT_GROUP("First filtering options"),
+		OPT_INTEGER( 0 , "f1_p"     , &f1_prms.patch_sz, "patch size"),
+		OPT_INTEGER( 0 , "f1_s"     , &f1_prms.search_sz, "search region radius"),
 #ifndef K_SIMILAR_PATCHES
-		OPT_FLOAT  ( 0 , "dth"   , &prms.dista_th, "patch distance threshold"),
+		OPT_FLOAT  ( 0 , "f1_dth"   , &f1_prms.dista_th, "patch distance threshold"),
 #else
-		OPT_INTEGER('m', "npatches_x", &prms.num_patches_x, "number of similar patches spatial"),
-		OPT_INTEGER('n', "npatches_t", &prms.num_patches_t, "number of similar patches kalman"),
-		OPT_INTEGER('n', "npatches_tx", &prms.num_patches_tx, "number of similar patches kalman spatial average"),
+		OPT_INTEGER( 0 , "f1_nx"    , &f1_prms.npatches_x, "number of similar patches spatial"),
+		OPT_INTEGER( 0 , "f1_nt"    , &f1_prms.npatches_t, "number of similar patches kalman"),
+		OPT_INTEGER( 0 , "f1_nt_agg", &f1_prms.npatches_tagg, "number of similar patches kalman spatial average"),
 #endif
-		OPT_FLOAT  ( 0 , "beta_x", &prms.beta_x, "noise multiplier in spatial filtering"),
-		OPT_FLOAT  ( 0 , "beta_t", &prms.beta_t, "noise multiplier in kalman filtering"),
-		OPT_FLOAT  ( 0 , "lambda", &prms.dista_lambda, "noisy patch weight in patch distance"),
-		OPT_BOOLEAN( 0 , "pixel" , &prms.pixelwise, "toggle pixel-wise denoising"),
+		OPT_FLOAT  ( 0 , "f1_bx"    , &f1_prms.beta_x, "noise multiplier in spatial filtering"),
+		OPT_FLOAT  ( 0 , "f1_bt"    , &f1_prms.beta_t, "noise multiplier in kalman filtering"),
+		OPT_FLOAT  ( 0 , "f1_l"     , &f1_prms.dista_lambda, "noisy patch weight in patch distance"),
+
+		OPT_GROUP("Second filtering options"),
+		OPT_INTEGER( 0 , "f2_p"     , &f2_prms.patch_sz, "patch size"),
+		OPT_INTEGER( 0 , "f2_s"     , &f2_prms.search_sz, "search region radius"),
+#ifndef K_SIMILAR_PATCHES
+		OPT_FLOAT  ( 0 , "f2_dth"   , &f2_prms.dista_th, "patch distance threshold"),
+#else
+		OPT_INTEGER( 0 , "f2_nx"    , &f2_prms.npatches_x, "number of similar patches spatial"),
+		OPT_INTEGER( 0 , "f2_nt"    , &f2_prms.npatches_t, "number of similar patches kalman"),
+		OPT_INTEGER( 0 , "f2_nt_agg", &f2_prms.npatches_tagg, "number of similar patches kalman spatial average"),
+#endif
+		OPT_FLOAT  ( 0 , "f2_bx"    , &f2_prms.beta_x, "noise multiplier in spatial filtering"),
+		OPT_FLOAT  ( 0 , "f2_bt"    , &f2_prms.beta_t, "noise multiplier in kalman filtering"),
+		OPT_FLOAT  ( 0 , "f2_l"     , &f2_prms.dista_lambda, "noisy patch weight in patch distance"),
+
+		OPT_GROUP("Smoothing options"),
+		OPT_INTEGER( 0 , "s1_p"     , &s1_prms.patch_sz, "patch size"),
+		OPT_INTEGER( 0 , "s1_s"     , &s1_prms.search_sz, "search region radius"),
+#ifndef K_SIMILAR_PATCHES
+		OPT_FLOAT  ( 0 , "s1_dth"   , &s1_prms.dista_th, "patch distance threshold"),
+#else
+		OPT_INTEGER( 0 , "s1_nt"    , &s1_prms.npatches_t, "number of similar patches kalman"),
+		OPT_INTEGER( 0 , "s1_nt_agg", &s1_prms.npatches_tagg, "number of similar patches kalman spatial average"),
+#endif
+		OPT_FLOAT  ( 0 , "s1_bt"    , &s1_prms.beta_t, "noise multiplier in kalman filtering"),
+		OPT_FLOAT  ( 0 , "s1_l"     , &s1_prms.dista_lambda, "noisy patch weight in patch distance"),
+
 		OPT_GROUP("Program options"),
 		OPT_BOOLEAN('v', "verbose", &verbose, "verbose output"),
 		OPT_END(),
@@ -1978,30 +2036,57 @@ int main(int argc, const char *argv[])
 	argc = argparse_parse(&argparse, argc, argv);
 
 	// default value for noise-dependent params
-	nlkalman_default_params(&prms, sigma);
+	nlkalman_default_params(&f1_prms, sigma);
+	nlkalman_default_params(&f2_prms, sigma);
+	nlkalman_default_params(&s1_prms, sigma);
 
 	// print parameters
 	if (verbose)
 	{
-		printf("parameters:\n");
-		printf("\tnoise  %f\n", sigma);
-		printf("\t%s-wise mode\n", prms.pixelwise ? "pixel" : "patch");
-		printf("\tpatch      %d\n", prms.patch_sz);
-		printf("\tsearch     %d\n", prms.search_sz);
+		printf("noise  %f\n", sigma);
+
+		printf("first filtering parameters:\n");
+		printf("\tpatch      %d\n", f1_prms.patch_sz);
+		printf("\tsearch     %d\n", f1_prms.search_sz);
 #ifndef K_SIMILAR_PATCHES
-		printf("\tdth        %g\n", prms.dista_th);
+		printf("\tdth        %g\n", f1_prms.dista_th);
 #else
-		printf("\tnpatches_x %d\n", prms.num_patches_x);
-		printf("\tnpatches_t %d\n", prms.num_patches_t);
-		printf("\tnpatches_tx %d\n", prms.num_patches_tx);
+		printf("\tnp_x       %d\n", f1_prms.npatches_x);
+		printf("\tnp_t       %d\n", f1_prms.npatches_t);
+		printf("\tnp_tagg    %d\n", f1_prms.npatches_tagg);
 #endif
-		printf("\tlambda     %g\n", prms.dista_lambda);
-		printf("\tbeta_x     %g\n", prms.beta_x);
-		printf("\tbeta_t     %g\n", prms.beta_t);
+		printf("\tlambda     %g\n", f1_prms.dista_lambda);
+		printf("\tbeta_x     %g\n", f1_prms.beta_x);
+		printf("\tbeta_t     %g\n", f1_prms.beta_t);
 		printf("\n");
-#ifdef WEIGHTED_AGGREGATION
-		printf("\tWEIGHTED_AGGREGATION ON\n");
+
+		printf("second filtering parameters:\n");
+		printf("\tpatch      %d\n", f2_prms.patch_sz);
+		printf("\tsearch     %d\n", f2_prms.search_sz);
+#ifndef K_SIMILAR_PATCHES
+		printf("\tdth        %g\n", f2_prms.dista_th);
+#else
+		printf("\tnp_x       %d\n", f2_prms.npatches_x);
+		printf("\tnp_t       %d\n", f2_prms.npatches_t);
+		printf("\tnp_tagg    %d\n", f2_prms.npatches_tagg);
 #endif
+		printf("\tlambda     %g\n", f2_prms.dista_lambda);
+		printf("\tbeta_x     %g\n", f2_prms.beta_x);
+		printf("\tbeta_t     %g\n", f2_prms.beta_t);
+		printf("\n");
+
+		printf("smoothing parameters:\n");
+		printf("\tpatch      %d\n", s1_prms.patch_sz);
+		printf("\tsearch     %d\n", s1_prms.search_sz);
+#ifndef K_SIMILAR_PATCHES
+		printf("\tdth        %g\n", s1_prms.dista_th);
+#else
+		printf("\tnp_t       %d\n", s1_prms.npatches_t);
+		printf("\tnp_tagg    %d\n", s1_prms.npatches_tagg);
+#endif
+		printf("\tlambda     %g\n", s1_prms.dista_lambda);
+		printf("\tbeta_t     %g\n", s1_prms.beta_t);
+		printf("\n");
 	}
 
 	// load data [[[2
@@ -2145,10 +2230,10 @@ int main(int argc, const char *argv[])
 		// filtering 1st step [[[3
 		float *nisy1 = nisy + (f - fframe)*whc;
 		float *deno0 = (f > fframe) ? warp0 : NULL;
-		nlkalman_filter_frame(bsic1, nisy1, deno0, NULL, w, h, c, sigma, prms, f);
+		nlkalman_filter_frame(bsic1, nisy1, deno0, NULL, w, h, c, sigma, f1_prms, f);
 
 		// filtering 2nd step [[[3
-		bool second_step = true;
+		bool second_step = f2_prms.patch_sz;
 		if (second_step && f > fframe)
 		{
 			// save output
@@ -2156,22 +2241,7 @@ int main(int argc, const char *argv[])
 			iio_save_image_float_vec(frame_name, bsic1, w, h, c);
 
 			// second step
-			struct nlkalman_params prms2;
-			prms2.patch_sz      = prms.patch_sz; // -1 means automatic value
-			prms2.search_sz     = prms.search_sz;
-#ifdef K_SIMILAR_PATCHES
-			prms2.num_patches_x = prms.num_patches_x;
-			prms2.num_patches_t = prms.num_patches_t;
-			prms2.num_patches_tx = prms.num_patches_tx;
-#else
-			prms2.dista_th      = prms.dista_th;
-#endif
-			prms2.beta_x        = prms.beta_x;
-			prms2.beta_t        = prms.beta_t;
-			prms2.dista_lambda  = prms.dista_lambda;
-			prms2.pixelwise     = false;
-
-			nlkalman_filter_frame(deno1, nisy1, deno0, bsic1, w, h, c, sigma, prms2, f);
+			nlkalman_filter_frame(deno1, nisy1, deno0, bsic1, w, h, c, sigma, f2_prms, f);
 			memcpy(nisy1, deno1, whc*sizeof(float));
 
 		}
@@ -2183,7 +2253,7 @@ int main(int argc, const char *argv[])
 		iio_save_image_float_vec(frame_name, nisy1, w, h, c);
 
 		// smoothing [[[3
-		bool smoothing = true;
+		bool smoothing = s1_prms.patch_sz;
 		if (smoothing && f > fframe)
 		{
 			// point to previous frame
@@ -2206,22 +2276,7 @@ int main(int argc, const char *argv[])
 			}
 
 			// run smoother [[[4
-			struct nlkalman_params prms2;
-			prms2.patch_sz     = prms.patch_sz; // -1 means automatic value
-			prms2.search_sz    = prms.search_sz;
-#ifdef K_SIMILAR_PATCHES
-			prms2.num_patches_x = prms.num_patches_x;
-			prms2.num_patches_t = prms.num_patches_t;
-			prms2.num_patches_tx = prms.num_patches_tx;
-#else
-			prms2.dista_th     = prms.dista_th;
-#endif
-			prms2.beta_x       = prms.beta_x;
-			prms2.beta_t       = prms.beta_t;
-			prms2.dista_lambda = prms.dista_lambda;
-			prms2.pixelwise = false;
-
-			nlkalman_smooth_frame(deno1, filt1, smoo0, NULL, w, h, c, sigma, prms2, f);
+			nlkalman_smooth_frame(deno1, filt1, smoo0, NULL, w, h, c, sigma, s1_prms, f);
 			memcpy(filt1, deno1, whc*sizeof(float));
 
 			// save output
