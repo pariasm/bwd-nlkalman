@@ -576,7 +576,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// aggregation weights
 	float *aggr1 = malloc(w*h*sizeof(float));
-	int   *mask1 = malloc(w*h*sizeof(float));
+	int   *mask1 = malloc(w*h*sizeof(int));
 
 	// set output and aggregation weights to 0
 	for (int i = 0; i < w*h*ch; ++i) deno1[i] = 0.;
@@ -635,6 +635,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 		float * patch_group = (float *)malloc(nagg*ch*psz*psz*sizeof*patch_group);
 		float (*PG)[ch][psz][psz] = (void *)patch_group;
 		struct patch_distance patch_group_coords[ nagg ];
+
 		for (int px = 0; px < w - psz + 1; px += step) // FIXME: right image border
 		{
 			int mask_p;
@@ -983,9 +984,9 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// free allocated mem and quit
 	dct_threads_destroy(dcts);
+	dct_threads_destroy(dcts_pg);
 	if (aggr1) free(aggr1);
 	if (mask1) free(mask1);
-	dct_threads_destroy(dcts_pg);
 
 	return; // ]]]2
 }
@@ -1008,7 +1009,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// aggregation weights
 	float *aggr1 = malloc(w*h*sizeof(float));
-	int   *mask1 = malloc(w*h*sizeof(float));
+	int   *mask1 = malloc(w*h*sizeof(int));
 
 	// set output and aggregation weights to 0
 	for (int i = 0; i < w*h*ch; ++i) deno1[i] = 0.;
