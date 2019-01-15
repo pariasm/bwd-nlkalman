@@ -1774,8 +1774,8 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 
 			float vp = 0;
 			nagg = min(np0, prms.num_patches_tx);
-			for (int n = 0; n < nagg; ++n)
 			if (np0 > 0) // enough patches with a valid previous patch
+			for (int n = 0; n < nagg; ++n)
 			{
 				// kalman-like temporal smoothing
 
@@ -1829,6 +1829,17 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 
 			// invert dct (output in F1S0)
 			dct_threads_inverse((float *)PG1, dcts_pg);
+
+			if (np0 == 0)
+			{
+				nagg = 1;
+				patch_group_coords[0].x = px;
+				patch_group_coords[0].y = py;
+				for (int hy = 0; hy < psz; ++hy)
+				for (int hx = 0; hx < psz; ++hx)
+				for (int c  = 0; c  < ch ; ++c )
+					PG1[0][c][hy][hx] = f1[py + hy][px + hx][c];
+			}
 
 #ifdef DEBUG_OUTPUT_SMOOTHING // [[[9
 			//if (b1)
