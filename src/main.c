@@ -13,6 +13,9 @@
 
 // some macros and data types [[[1
 
+// comment for patch distance using previous frame
+//#define LAMBDA_DISTANCE
+
 // comment for uniform aggregation
 #define WEIGHTED_AGGREGATION
 
@@ -671,28 +674,31 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				const int wy[2] = {max(py - wsz, 0), min(py + wsz, h - psz) + 1};
 
 				// compute all distances [[[4
+				const float l = prms.dista_lambda;
 				struct patch_distance pdists[ (wy[1]-wy[0]) * (wx[1]-wx[0]) ];
 				for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
 				for (int qx = wx[0]       ; qx < wx[1]; ++qx, ++i)
 				{
-					// store patch at q
-
+#ifdef LAMBDA_DISTANCE // slow patch distance [[[5
 					// check if the previous patch at q is valid
-					bool prev_q = d0;
-					if (prev_q)
-						for (int hy = 0; hy < psz; ++hy)
-						for (int hx = 0; hx < psz; ++hx)
-						if (prev_q && isnan(d0[qy + hy][qx + hx][0]))
-							prev_q = false;
+					bool prev = false;
+					if (l != 1)
+					{
+						bool prev_q = d0;
+						if (prev_q)
+							for (int hy = 0; hy < psz; ++hy)
+							for (int hx = 0; hx < psz; ++hx)
+							if (prev_q && isnan(d0[qy + hy][qx + hx][0]))
+								prev_q = false;
 
-					const bool prev = prev_p && prev_q;
+						prev = prev_p && prev_q;
+					}
 
 					// compute patch distance
 					float ww = 0; // patch distance is saved here
-					const float l = prms.dista_lambda;
 					for (int hy = 0; hy < psz; ++hy)
 					for (int hx = 0; hx < psz; ++hx)
-						if (prev && l != 1)
+						if (prev)
 							// use noisy and denoised patches from previous frame
 							for (int c  = 0; c  < ch ; ++c )
 							{
@@ -710,7 +716,19 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 								                    : n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
 								ww += e1 * e1 - dista_sigma2;
 							}
-						}
+						} // 5]]]
+#else // faster version of the distance (when lambda = 1)
+					// compute patch distance
+					float ww = 0; // patch distance is saved here
+					for (int hy = 0; hy < psz; ++hy)
+					for (int hx = 0; hx < psz; ++hx)
+					for (int c  = 0; c  < ch ; ++c )
+					{
+						const float e1 = b1 ? b1[qy + hy][qx + hx][c] - N1[hy][hx][c]
+						                    : n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
+						ww += e1 * e1 - dista_sigma2;
+					}
+#endif
 
 					// normalize distance by number of pixels in patch
 					pdists[i].x = qx;
@@ -1086,28 +1104,31 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 				const int wy[2] = {max(py - wsz, 0), min(py + wsz, h - psz) + 1};
 
 				// compute all distances [[[4
+				const float l = prms.dista_lambda;
 				struct patch_distance pdists[ (wy[1]-wy[0]) * (wx[1]-wx[0]) ];
 				for (int qy = wy[0], i = 0; qy < wy[1]; ++qy)
 				for (int qx = wx[0]       ; qx < wx[1]; ++qx, ++i)
 				{
-					// store patch at q
-
+#ifdef LAMBDA_DISTANCE // slow patch distance [[[5
 					// check if the previous patch at q is valid
-					bool prev_q = d0;
-					if (prev_q)
-						for (int hy = 0; hy < psz; ++hy)
-						for (int hx = 0; hx < psz; ++hx)
-						if (prev_q && isnan(d0[qy + hy][qx + hx][0]))
-							prev_q = false;
+					bool prev = false;
+					if (l != 1)
+					{
+						bool prev_q = d0;
+						if (prev_q)
+							for (int hy = 0; hy < psz; ++hy)
+							for (int hx = 0; hx < psz; ++hx)
+							if (prev_q && isnan(d0[qy + hy][qx + hx][0]))
+								prev_q = false;
 
-					const bool prev = prev_p && prev_q;
+						prev = prev_p && prev_q;
+					}
 
 					// compute patch distance
 					float ww = 0; // patch distance is saved here
-					const float l = prms.dista_lambda;
 					for (int hy = 0; hy < psz; ++hy)
 					for (int hx = 0; hx < psz; ++hx)
-						if (prev && l != 1)
+						if (prev)
 							// use noisy and denoised patches from previous frame
 							for (int c  = 0; c  < ch ; ++c )
 							{
@@ -1125,7 +1146,19 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 								                    : n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
 								ww += e1 * e1 - dista_sigma2;
 							}
-						}
+						} // 5]]]
+#else // faster version of the distance (when lambda = 1)
+					// compute patch distance
+					float ww = 0; // patch distance is saved here
+					for (int hy = 0; hy < psz; ++hy)
+					for (int hx = 0; hx < psz; ++hx)
+					for (int c  = 0; c  < ch ; ++c )
+					{
+						const float e1 = b1 ? b1[qy + hy][qx + hx][c] - N1[hy][hx][c]
+						                    : n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
+						ww += e1 * e1 - dista_sigma2;
+					}
+#endif
 
 					// normalize distance by number of pixels in patch
 					pdists[i].x = qx;
