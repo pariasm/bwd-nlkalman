@@ -232,9 +232,9 @@ void dct_threads_init(int w, int h, int f, int n, int t, struct dct_threads * dc
 			{
 				dct_t->dataspace[i] = (float*)fftwf_malloc(sizeof(float) * N);
 				dct_t->datafreq [i] = (float*)fftwf_malloc(sizeof(float) * N);
-		
+
 				int sz[] = {f, h, w};
-		
+
 				fftwf_r2r_kind dct[] = {FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10};
 				dct_t->plan_forward[i] = fftwf_plan_many_r2r(3, sz, n,
 						dct_t->dataspace[i], NULL, 1, w * h * f, 
@@ -242,7 +242,7 @@ void dct_threads_init(int w, int h, int f, int n, int t, struct dct_threads * dc
 //						dct_t->dataspace[i], NULL, n, 1, 
 //						dct_t->datafreq [i], NULL, n, 1,
 						dct, FFTW_ESTIMATE);
-		
+
 				fftwf_r2r_kind idct[] = {FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01};
 				dct_t->plan_backward[i] = fftwf_plan_many_r2r(3, sz, n,
 						dct_t->datafreq [i], NULL, 1, w * h * f,
@@ -252,7 +252,7 @@ void dct_threads_init(int w, int h, int f, int n, int t, struct dct_threads * dc
 						idct, FFTW_ESTIMATE);
 			}
 			break;
-			
+
 		case MATPROD:
 
 			fprintf(stderr, "MATPROD DCT HANDLER IS NOT YET IMPLEMENTED\n");
