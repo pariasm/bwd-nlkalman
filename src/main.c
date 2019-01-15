@@ -620,7 +620,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	for (int py = 0; py < h - psz + 1; py += step) // FIXME: boundary pixels
 	for (int px = 0; px < w - psz + 1; px += step) // may not be denoised
 	{
-		//	load target patch [[[3
+		// load target patch [[[3
 		bool prev_p = d0;
 		for (int hy = 0; hy < psz; ++hy)
 		for (int hx = 0; hx < psz; ++hx)
@@ -675,15 +675,6 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 				const bool prev = prev_p && prev_q;
 
-				for (int c  = 0; c  < ch ; ++c )
-				for (int hy = 0; hy < psz; ++hy)
-				for (int hx = 0; hx < psz; ++hx)
-				{
-					N1D0[c     ][hy][hx] = b1   ? b1[qy + hy][qx + hx][c]
-					                            : n1[qy + hy][qx + hx][c];
-					N1D0[c + ch][hy][hx] = prev ? d0[qy + hy][qx + hx][c] : 0;
-				}
-
 				// compute patch distance
 				float ww = 0; // patch distance is saved here
 				const float l = prms.dista_lambda;
@@ -693,8 +684,9 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 						// use noisy and denoised patches from previous frame
 						for (int c  = 0; c  < ch ; ++c )
 						{
-							const float e1 = N1D0[c     ][hy][hx] - N1[hy][hx][c];
-							const float e0 = N1D0[c + ch][hy][hx] - D0[hy][hx][c];
+							const float e1 = b1 ? b1[qy + hy][qx + hx][c] - N1[hy][hx][c]
+							                    : n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
+							const float e0 = d0[qy + hy][qx + hx][c] - D0[hy][hx][c];
 							ww += l * (e1 * e1 - dista_sigma2) + (1 - l) * e0 * e0;
 						}
 					else
@@ -702,7 +694,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 						// use only noisy from current frame
 						for (int c  = 0; c  < ch ; ++c )
 						{
-							const float e1 = N1D0[c][hy][hx] - N1[hy][hx][c];
+							const float e1 = b1 ? b1[qy + hy][qx + hx][c] - N1[hy][hx][c]
+							                    : n1[qy + hy][qx + hx][c] - N1[hy][hx][c];
 							ww += e1 * e1 - dista_sigma2;
 						}
 					}
