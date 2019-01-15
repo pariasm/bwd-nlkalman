@@ -566,7 +566,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	// definitions [[[2
 
 	const int psz = prms.patch_sz;
-	const int step = prms.pixelwise ? 1 : psz/2;
+	const int step = psz/2;
 	const float sigma2 = sigma * sigma;
 #ifndef K_SIMILAR_PATCHES
 	const float dista_th2 = prms.dista_th * prms.dista_th;
@@ -574,8 +574,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	const float beta_x  = prms.beta_x;
 	const float beta_t  = prms.beta_t;
 
-	// aggregation weights (not necessary for pixel-wise nlmeans)
-	float *aggr1 = prms.pixelwise ? NULL : malloc(w*h*sizeof(float));
+	// aggregation weights
+	float *aggr1 = malloc(w*h*sizeof(float));
 
 	// set output and aggregation weights to 0
 	for (int i = 0; i < w*h*ch; ++i) deno1[i] = 0.;
@@ -938,36 +938,26 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 			dct_threads_inverse((float *)PG, dcts_pg);
 
-			// aggregate denoised patch on output image [[[3
-			if (a1)
-			{
-				// patch-wise denoising: aggregate the whole denoised patch
-
+			// aggregate denoised group on output image [[[3
 #ifdef WEIGHTED_AGGREGATION
-				const float w = 1.f/vp;
+			const float w = 1.f/vp;
 #else
-				const float w = 1.f;
+			const float w = 1.f;
 #endif
-				for (int n = 0; n < nagg; ++n)
+			for (int n = 0; n < nagg; ++n)
+			{
+				int qx = patch_group_coords[n].x;
+				int qy = patch_group_coords[n].y;
+				for (int hy = 0; hy < psz; ++hy)
+				for (int hx = 0; hx < psz; ++hx)
 				{
-					int qx = patch_group_coords[n].x;
-					int qy = patch_group_coords[n].y;
-					for (int hy = 0; hy < psz; ++hy)
-					for (int hx = 0; hx < psz; ++hx)
-					{
+					#pragma omp atomic
+					a1[qy + hy][qx + hx] += w * W[hy][hx];
+					for (int c = 0; c < ch ; ++c )
 						#pragma omp atomic
-						a1[qy + hy][qx + hx] += w * W[hy][hx];
-						for (int c = 0; c < ch ; ++c )
-							#pragma omp atomic
-							d1[qy + hy][qx + hx][c] += w * W[hy][hx] * PG[n][c][hy][hx];
-					}
+						d1[qy + hy][qx + hx][c] += w * W[hy][hx] * PG[n][c][hy][hx];
 				}
 			}
-			else
-				// pixel-wise denoising: aggregate only the central pixel
-				for (int c = 0; c < ch ; ++c )
-					#pragma omp atomic
-					d1[py + psz/2][px + psz/2][c] += N1D0[c][psz/2][psz/2];
 
 			// ]]]3
 		}
@@ -996,7 +986,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	// definitions [[[2
 
 	const int psz = prms.patch_sz;
-	const int step = prms.pixelwise ? 1 : psz/2;
+	const int step = psz/2;
 	const float sigma2 = sigma * sigma;
 #ifndef K_SIMILAR_PATCHES
 	const float dista_th2 = prms.dista_th * prms.dista_th;
@@ -1004,8 +994,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	const float beta_x  = prms.beta_x;
 	const float beta_t  = prms.beta_t;
 
-	// aggregation weights (not necessary for pixel-wise nlmeans)
-	float *aggr1 = prms.pixelwise ? NULL : malloc(w*h*sizeof(float));
+	// aggregation weights
+	float *aggr1 = malloc(w*h*sizeof(float));
 
 	// set output and aggregation weights to 0
 	for (int i = 0; i < w*h*ch; ++i) deno1[i] = 0.;
@@ -1368,36 +1358,26 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 			dct_threads_inverse((float *)PG, dcts_pg);
 
-			// aggregate denoised patch on output image [[[3
-			if (a1)
-			{
-				// patch-wise denoising: aggregate the whole denoised patch
-
+			// aggregate denoised group on output image [[[3
 #ifdef WEIGHTED_AGGREGATION
-				const float w = 1.f/vp;
+			const float w = 1.f/vp;
 #else
-				const float w = 1.f;
+			const float w = 1.f;
 #endif
-				for (int n = 0; n < nagg; ++n)
+			for (int n = 0; n < nagg; ++n)
+			{
+				int qx = patch_group_coords[n].x;
+				int qy = patch_group_coords[n].y;
+				for (int hy = 0; hy < psz; ++hy)
+				for (int hx = 0; hx < psz; ++hx)
 				{
-					int qx = patch_group_coords[n].x;
-					int qy = patch_group_coords[n].y;
-					for (int hy = 0; hy < psz; ++hy)
-					for (int hx = 0; hx < psz; ++hx)
-					{
+					#pragma omp atomic
+					a1[qy + hy][qx + hx] += w * W[hy][hx];
+					for (int c = 0; c < ch ; ++c )
 						#pragma omp atomic
-						a1[qy + hy][qx + hx] += w * W[hy][hx];
-						for (int c = 0; c < ch ; ++c )
-							#pragma omp atomic
-							d1[qy + hy][qx + hx][c] += w * W[hy][hx] * PG[n][c][hy][hx];
-					}
+						d1[qy + hy][qx + hx][c] += w * W[hy][hx] * PG[n][c][hy][hx];
 				}
 			}
-			else
-				// pixel-wise denoising: aggregate only the central pixel
-				for (int c = 0; c < ch ; ++c )
-					#pragma omp atomic
-					d1[py + psz/2][px + psz/2][c] += N1D0[c][psz/2][psz/2];
 
 			// ]]]3
 		}
