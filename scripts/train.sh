@@ -84,8 +84,8 @@ do
 	then
 		for seq in ${seqs[@]}
 		do
-			echo  "$BIN/rnldct-train.sh ${sf}${seq} $ff $lf $s $trialfolder \"$params\""
-			psnr=$($BIN/rnldct-train.sh ${sf}${seq} $ff $lf $s $trialfolder  "$params")
+			echo  "$BIN/nlkalman-train.sh ${sf}${seq} $ff $lf $s $trialfolder \"$params\""
+			psnr=$($BIN/nlkalman-train.sh ${sf}${seq} $ff $lf $s $trialfolder  "$params")
 			mpsnr=$(echo "$mpsnr + $psnr/$nseqs" | bc -l)
 			echo $psnr $mpsnr
 		done

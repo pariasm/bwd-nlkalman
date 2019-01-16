@@ -45,8 +45,8 @@ function run_rnlm {
 	nseqs=${#seqs[@]}
 	for seq in ${seqs[@]}
 	do
-		echo $BIN/rnldct-train.sh ${sf}${seq} $f0 $f1 $s $trialfolder/$seq \"$params\"
-		time $BIN/rnldct-train.sh ${sf}${seq} $f0 $f1 $s $trialfolder/$seq  "$params"
+		echo $BIN/nlkalman-train.sh ${sf}${seq} $f0 $f1 $s $trialfolder/$seq \"$params\"
+		time $BIN/nlkalman-train.sh ${sf}${seq} $f0 $f1 $s $trialfolder/$seq  "$params"
 	done
 
 }

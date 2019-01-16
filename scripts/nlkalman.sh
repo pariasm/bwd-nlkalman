@@ -51,13 +51,12 @@ done
 ### 				-o $file
 ### 	fi
 ### done
-### 
-### # run denoising {{{1
+
+# run denoising {{{1
 ### $DIR/nlkalman-bwd \
 ###  -i $SEQ -o $OUT"/%03d_b.flo" -k $OUT"/occ_%03d_b.png" \
 ###  -f $FFR -l $LFR -s $SIG -d $OUT"/deno_%03d.tif" $PRM
 
-# run denoising {{{1
 echo "$DIR/nlkalman-bwd \
  -i $SEQ -f $FFR -l $LFR -s $SIG -d $OUT"/deno_%03d.tif" $PRM"
 $DIR/nlkalman-bwd \
