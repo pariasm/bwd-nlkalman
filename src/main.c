@@ -8,9 +8,6 @@
 
 #include <stdio.h>     // getchar() for debugging
 
-//#define DEBUG_OUTPUT_FILTERING
-//#define DEBUG_OUTPUT_SMOOTHING
-
 // some macros and data types [[[1
 
 // comment for patch distance using previous frame
@@ -21,6 +18,10 @@
 
 // comment for distance threshold
 #define K_SIMILAR_PATCHES
+
+// for debugging
+//#define DEBUG_OUTPUT_FILTERING
+//#define DEBUG_OUTPUT_SMOOTHING
 
 #define max(a,b) \
 	({ __typeof__ (a) _a = (a); \
@@ -462,7 +463,8 @@ float * window_function(const char * type, int NN)
 struct nlkalman_params
 {
 	int patch_sz;        // patch size
-	int search_sz;       // search window radius
+	int search_sz_x;     // search window radius for spatial filtering
+	int search_sz_t;     // search window radius for temporal filtering
 #ifdef K_SIMILAR_PATCHES
 	int npatches_x;      // number of similar patches spatial filtering
 	int npatches_t;      // number of similar patches temporal filtering
@@ -504,7 +506,8 @@ void nlkalman_default_params(struct nlkalman_params * p, float sigma)
 #define DERFHD_PARAMS
 #ifdef DERFHD_PARAMS
 	if (p->patch_sz      < 0) p->patch_sz      = 8;  // not tuned
-	if (p->search_sz     < 0) p->search_sz     = 10; // not tuned
+	if (p->search_sz_x   < 0) p->search_sz_x   = 10; // not tuned
+	if (p->search_sz_t   < 0) p->search_sz_t   = 10; // not tuned
  #ifndef K_SIMILAR_PATCHES
 	if (p->dista_th      < 0) p->dista_th      = .5*sigma + 15.0;
  #else
@@ -517,7 +520,8 @@ void nlkalman_default_params(struct nlkalman_params * p, float sigma)
 	if (p->beta_t        < 0) p->beta_t        = 0.05*sigma + 6.0;
 #else // DERFCIF_PARAMS
 	if (p->patch_sz      < 0) p->patch_sz      = 8;  // not tuned
-	if (p->search_sz     < 0) p->search_sz     = 10; // not tuned
+	if (p->search_sz_x   < 0) p->search_sz_x   = 10; // not tuned
+	if (p->search_sz_t   < 0) p->search_sz_t   = 10; // not tuned
  #ifndef K_SIMILAR_PATCHES
 	if (p->dista_th      < 0) p->dista_th      = (60. - 38.)*(sigma - 10.) + 38.0;
  #else
@@ -677,7 +681,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			if (dista_th2)
 #endif
 			{
-				const int wsz = prms.search_sz;
+				const int wsz = prev_p ? prms.search_sz_t : prms.search_sz_x ;
 				const int wx[2] = {max(px - wsz, 0), min(px + wsz, w - psz) + 1};
 				const int wy[2] = {max(py - wsz, 0), min(py + wsz, h - psz) + 1};
 
@@ -1150,7 +1154,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			if (dista_th2)
 #endif
 			{
-				const int wsz = prms.search_sz;
+				const int wsz = prev_p ? prms.search_sz_t : prms.search_sz_x ;
 				const int wx[2] = {max(px - wsz, 0), min(px + wsz, w - psz) + 1};
 				const int wy[2] = {max(py - wsz, 0), min(py + wsz, h - psz) + 1};
 
@@ -1562,7 +1566,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 			if (dista_th2)
 #endif
 			{
-				const int wsz = prms.search_sz;
+				const int wsz = prms.search_sz_t;
 				const int wx[2] = {max(px - wsz, 0), min(px + wsz, w - psz) + 1};
 				const int wy[2] = {max(py - wsz, 0), min(py + wsz, h - psz) + 1};
 
@@ -1773,6 +1777,7 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 
 			float vp = 0;
 			nagg = min(np0, prms.npatches_tagg);
+			const float b = prms.beta_t;
 			if (np0 > 0) // enough patches with a valid previous patch
 			for (int n = 0; n < nagg; ++n)
 			{
@@ -1802,11 +1807,11 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 				for (int hx = 0; hx < psz; ++hx)
 				{
 					// kalman smoothing gain
-					float a = V1[c][hy][hx] / (V1[c][hy][hx] + V01[c][hy][hx]);
+					float a = V1[c][hy][hx] / (V1[c][hy][hx] + b * V01[c][hy][hx]);
 
 					// variance of filtered patch
 					vp += (1 - a * a) * V1[c][hy][hx]
-					    + a * a * max(V0[c][hy][hx] - V01[c][hy][hx], 0.f);
+					         + a * a  * max(V0[c][hy][hx] - b * V01[c][hy][hx], 0.f);
 
 					// filter
 					PG1[n][c][hy][hx] = (1 - a)*PG1[n][c][hy][hx] + a*PG0[n][c][hy][hx];
@@ -1927,7 +1932,8 @@ int main(int argc, const char *argv[])
 	// first filtering options
 	struct nlkalman_params f1_prms;
 	f1_prms.patch_sz      = -1; // -1 means automatic value
-	f1_prms.search_sz     = -1;
+	f1_prms.search_sz_x   = -1;
+	f1_prms.search_sz_t   = -1;
 #ifndef K_SIMILAR_PATCHES
 	f1_prms.dista_th      = -1.;
 #else
@@ -1942,7 +1948,8 @@ int main(int argc, const char *argv[])
 	// second filtering options
 	struct nlkalman_params f2_prms;
 	f2_prms.patch_sz      = -1; // -1 means automatic value
-	f2_prms.search_sz     = -1;
+	f2_prms.search_sz_x   = -1;
+	f2_prms.search_sz_t   = -1;
 #ifndef K_SIMILAR_PATCHES
 	f2_prms.dista_th      = -1.;
 #else
@@ -1957,7 +1964,8 @@ int main(int argc, const char *argv[])
 	// smoothing options
 	struct nlkalman_params s1_prms;
 	s1_prms.patch_sz      = -1; // -1 means automatic value
-	s1_prms.search_sz     = -1;
+	s1_prms.search_sz_x   = -1;
+	s1_prms.search_sz_t   = -1;
 #ifndef K_SIMILAR_PATCHES
 	s1_prms.dista_th      = -1.;
 #else
@@ -1986,7 +1994,8 @@ int main(int argc, const char *argv[])
 
 		OPT_GROUP("First filtering options"),
 		OPT_INTEGER( 0 , "f1_p"     , &f1_prms.patch_sz, "patch size"),
-		OPT_INTEGER( 0 , "f1_s"     , &f1_prms.search_sz, "search region radius"),
+		OPT_INTEGER( 0 , "f1_sx"    , &f1_prms.search_sz_x, "search radius (spatial filtering)"),
+		OPT_INTEGER( 0 , "f1_st"    , &f1_prms.search_sz_t, "search radius (temporal filtering)"),
 #ifndef K_SIMILAR_PATCHES
 		OPT_FLOAT  ( 0 , "f1_dth"   , &f1_prms.dista_th, "patch distance threshold"),
 #else
@@ -2000,7 +2009,8 @@ int main(int argc, const char *argv[])
 
 		OPT_GROUP("Second filtering options"),
 		OPT_INTEGER( 0 , "f2_p"     , &f2_prms.patch_sz, "patch size"),
-		OPT_INTEGER( 0 , "f2_s"     , &f2_prms.search_sz, "search region radius"),
+		OPT_INTEGER( 0 , "f2_sx"    , &f2_prms.search_sz_x, "search radius (spatial filtering)"),
+		OPT_INTEGER( 0 , "f2_st"    , &f2_prms.search_sz_t, "search radius (temporal filtering)"),
 #ifndef K_SIMILAR_PATCHES
 		OPT_FLOAT  ( 0 , "f2_dth"   , &f2_prms.dista_th, "patch distance threshold"),
 #else
@@ -2014,7 +2024,7 @@ int main(int argc, const char *argv[])
 
 		OPT_GROUP("Smoothing options"),
 		OPT_INTEGER( 0 , "s1_p"     , &s1_prms.patch_sz, "patch size"),
-		OPT_INTEGER( 0 , "s1_s"     , &s1_prms.search_sz, "search region radius"),
+		OPT_INTEGER( 0 , "s1_st"    , &s1_prms.search_sz_t, "search region radius"),
 #ifndef K_SIMILAR_PATCHES
 		OPT_FLOAT  ( 0 , "s1_dth"   , &s1_prms.dista_th, "patch distance threshold"),
 #else
@@ -2047,7 +2057,8 @@ int main(int argc, const char *argv[])
 
 		printf("first filtering parameters:\n");
 		printf("\tpatch      %d\n", f1_prms.patch_sz);
-		printf("\tsearch     %d\n", f1_prms.search_sz);
+		printf("\tsearch_x   %d\n", f1_prms.search_sz_x);
+		printf("\tsearch_t   %d\n", f1_prms.search_sz_t);
 #ifndef K_SIMILAR_PATCHES
 		printf("\tdth        %g\n", f1_prms.dista_th);
 #else
@@ -2062,7 +2073,8 @@ int main(int argc, const char *argv[])
 
 		printf("second filtering parameters:\n");
 		printf("\tpatch      %d\n", f2_prms.patch_sz);
-		printf("\tsearch     %d\n", f2_prms.search_sz);
+		printf("\tsearch_x   %d\n", f2_prms.search_sz_x);
+		printf("\tsearch_t   %d\n", f2_prms.search_sz_t);
 #ifndef K_SIMILAR_PATCHES
 		printf("\tdth        %g\n", f2_prms.dista_th);
 #else
@@ -2077,7 +2089,7 @@ int main(int argc, const char *argv[])
 
 		printf("smoothing parameters:\n");
 		printf("\tpatch      %d\n", s1_prms.patch_sz);
-		printf("\tsearch     %d\n", s1_prms.search_sz);
+		printf("\tsearch_t   %d\n", s1_prms.search_sz_t);
 #ifndef K_SIMILAR_PATCHES
 		printf("\tdth        %g\n", s1_prms.dista_th);
 #else
