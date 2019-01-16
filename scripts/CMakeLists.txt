@@ -4,3 +4,6 @@ configure_file(nlkalman-gt.sh    ${CMAKE_BINARY_DIR}/bin/nlkalman-gt.sh    COPYO
 configure_file(nlkalman-train.sh ${CMAKE_BINARY_DIR}/bin/nlkalman-train.sh COPYONLY)
 configure_file(best-results.sh   ${CMAKE_BINARY_DIR}/bin/best-results.sh   COPYONLY)
 configure_file(tvl1flow-seq.sh   ${CMAKE_BINARY_DIR}/bin/tvl1flow-seq.sh   COPYONLY)
+configure_file(train-smoothing-gt.sh       ${CMAKE_BINARY_DIR}/bin/train-smoothing-gt.sh       COPYONLY)
+configure_file(nlkalman-smoothing-train.sh ${CMAKE_BINARY_DIR}/bin/nlkalman-smoothing-train.sh COPYONLY)
+configure_file(nlkalman-smoothing-train.sh ${CMAKE_BINARY_DIR}/bin/nlkalman-smoothing-train.sh COPYONLY)
