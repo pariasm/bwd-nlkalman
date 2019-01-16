@@ -1918,13 +1918,14 @@ int main(int argc, const char *argv[])
 	// parse command line [[[2
 
 	// command line parameters and their defaults
-	const char *nisy_path = NULL;
-	const char *deno_path = NULL;
-	const char *bsic_path = NULL;
-	const char *bflo_path = NULL;
-	const char *bocc_path = NULL;
-	const char *fflo_path = NULL;
-	const char *focc_path = NULL;
+	const char *nisy_path = NULL; // input noisy frames path
+	const char *bflo_path = NULL; // input bwd flows path
+	const char *bocc_path = NULL; // input bwd occlusions path
+	const char *fflo_path = NULL; // input fwd flows path
+	const char *focc_path = NULL; // input fwd occlusions path
+	const char *flt1_path = NULL; // output first filtering path
+	const char *flt2_path = NULL; // output second filtering path
+	const char *smo1_path = NULL; // output smoothing path
 	int fframe = 0, lframe = -1;
 	float sigma = 0.f;
 	bool verbose = false;
@@ -1963,7 +1964,7 @@ int main(int argc, const char *argv[])
 
 	// smoothing options
 	struct nlkalman_params s1_prms;
-	s1_prms.patch_sz      = -1; // -1 means automatic value
+	s1_prms.patch_sz      =  0; // -1 means automatic value
 	s1_prms.search_sz_x   = -1;
 	s1_prms.search_sz_t   = -1;
 #ifndef K_SIMILAR_PATCHES
@@ -1980,14 +1981,15 @@ int main(int argc, const char *argv[])
 	// configure command line parser
 	struct argparse_option options[] = {
 		OPT_HELP(),
-		OPT_GROUP("Data i/o options"),
-		OPT_STRING ('i', "nisy"  , &nisy_path, "noisy input path (printf format)"),
-		OPT_STRING ('o', "bflow" , &bflo_path, "bwd flow path (printf format)"),
-		OPT_STRING ('k', "boccl" , &bocc_path, "bwd flow occlusions mask (printf format)"),
-		OPT_STRING ( 0 , "fflow" , &fflo_path, "fwd flow path (printf format)"),
-		OPT_STRING ( 0 , "foccl" , &focc_path, "fwd flow occlusions mask (printf format)"),
-		OPT_STRING ('d', "deno"  , &deno_path, "denoised output path (printf format)"),
-		OPT_STRING ( 0 , "bsic"  , &bsic_path, "basic estimate output path (printf format)"),
+		OPT_GROUP("Data i/o options (all paths in printf format)"),
+		OPT_STRING ('i', "nisy"  , &nisy_path, "input noisy frames path"),
+		OPT_STRING ('o', "bflow" , &bflo_path, "input bwd flow path"),
+		OPT_STRING ('k', "boccl" , &bocc_path, "input bwd occlusion masks path"),
+		OPT_STRING ( 0 , "fflow" , &fflo_path, "input fwd flow path"),
+		OPT_STRING ( 0 , "foccl" , &focc_path, "input fwd occlusion masks path"),
+		OPT_STRING ( 0 , "filt1" , &flt1_path, "output first filtering path"),
+		OPT_STRING ( 0 , "filt2" , &flt2_path, "output second filtering path"),
+		OPT_STRING ( 0 , "smoo1" , &smo1_path, "output smoothing path"),
 		OPT_INTEGER('f', "first" , &fframe, "first frame"),
 		OPT_INTEGER('l', "last"  , &lframe , "last frame"),
 		OPT_FLOAT  ('s', "sigma" , &sigma, "noise standard dev"),
@@ -2045,6 +2047,30 @@ int main(int argc, const char *argv[])
 	argparse_describe(&argparse, "\nA video denoiser based on non-local means.", "");
 	argc = argparse_parse(&argparse, argc, argv);
 
+	// determine mode
+	bool second_filt = (f2_prms.patch_sz && (flt2_path || smo1_path));
+	bool smoothing   = (s1_prms.patch_sz && smo1_path);
+
+	// check if output paths have been provided
+	if ((f1_prms.patch_sz == 0))
+		return fprintf(stderr, "Error: f1_p == 0, exiting\n"), 1;
+
+	if (!flt1_path && !(flt2_path && f2_prms.patch_sz) && !smoothing)
+		return fprintf(stderr, "Error: no output path given for any "
+		                       "computed output - exiting\n"), 1;
+
+	if (!flt1_path && !flt2_path && s1_prms.patch_sz == 0)
+		return fprintf(stderr, "Error: s1_p == 0 and no output paths given for "
+		                       "filt1 and filt2\n"), 1;
+
+	if (f2_prms.patch_sz == 0 && flt2_path)
+		fprintf(stderr, "Warning: f2_p == 0 - no output files will "
+		                "be stored in %s\n", flt2_path);
+
+	if (s1_prms.patch_sz == 0 && smo1_path)
+		fprintf(stderr, "Warning: s1_p == 0 - no output files will "
+		                "be stored in %s\n", smo1_path);
+
 	// default value for noise-dependent params
 	nlkalman_default_params(&f1_prms, sigma);
 	nlkalman_default_params(&f2_prms, sigma);
@@ -2053,7 +2079,22 @@ int main(int argc, const char *argv[])
 	// print parameters
 	if (verbose)
 	{
-		printf("noise  %f\n", sigma);
+		printf("data input:\n");
+		printf("\tnoise         %5.2f\n", sigma);
+		printf("\tfirst frame   %d\n", fframe);
+		printf("\tlast frame    %d\n", lframe);
+		printf("\tnoisy frames  %s\n", nisy_path);
+		printf("\tbwd flows     %s\n", bflo_path);
+		printf("\tfwd flows     %s\n", fflo_path);
+		printf("\tbwd occlus.   %s\n", bocc_path);
+		printf("\tfwd occlus.   %s\n", focc_path);
+		printf("\n");
+
+		printf("data output:\n");
+		printf("\tfiltering 1   %s\n", flt1_path);
+		printf("\tfiltering 2   %s\n", flt2_path);
+		printf("\tsmoothing 1   %s\n", smo1_path);
+		printf("\n");
 
 		printf("first filtering parameters:\n");
 		printf("\tpatch      %d\n", f1_prms.patch_sz);
@@ -2071,34 +2112,40 @@ int main(int argc, const char *argv[])
 		printf("\tbeta_t     %g\n", f1_prms.beta_t);
 		printf("\n");
 
-		printf("second filtering parameters:\n");
-		printf("\tpatch      %d\n", f2_prms.patch_sz);
-		printf("\tsearch_x   %d\n", f2_prms.search_sz_x);
-		printf("\tsearch_t   %d\n", f2_prms.search_sz_t);
+		if (second_filt)
+		{
+			printf("second filtering parameters:\n");
+			printf("\tpatch      %d\n", f2_prms.patch_sz);
+			printf("\tsearch_x   %d\n", f2_prms.search_sz_x);
+			printf("\tsearch_t   %d\n", f2_prms.search_sz_t);
 #ifndef K_SIMILAR_PATCHES
-		printf("\tdth        %g\n", f2_prms.dista_th);
+			printf("\tdth        %g\n", f2_prms.dista_th);
 #else
-		printf("\tnp_x       %d\n", f2_prms.npatches_x);
-		printf("\tnp_t       %d\n", f2_prms.npatches_t);
-		printf("\tnp_tagg    %d\n", f2_prms.npatches_tagg);
+			printf("\tnp_x       %d\n", f2_prms.npatches_x);
+			printf("\tnp_t       %d\n", f2_prms.npatches_t);
+			printf("\tnp_tagg    %d\n", f2_prms.npatches_tagg);
 #endif
-		printf("\tlambda     %g\n", f2_prms.dista_lambda);
-		printf("\tbeta_x     %g\n", f2_prms.beta_x);
-		printf("\tbeta_t     %g\n", f2_prms.beta_t);
-		printf("\n");
+			printf("\tlambda     %g\n", f2_prms.dista_lambda);
+			printf("\tbeta_x     %g\n", f2_prms.beta_x);
+			printf("\tbeta_t     %g\n", f2_prms.beta_t);
+			printf("\n");
+		}
 
-		printf("smoothing parameters:\n");
-		printf("\tpatch      %d\n", s1_prms.patch_sz);
-		printf("\tsearch_t   %d\n", s1_prms.search_sz_t);
+		if (smoothing)
+		{
+			printf("smoothing parameters:\n");
+			printf("\tpatch      %d\n", s1_prms.patch_sz);
+			printf("\tsearch_t   %d\n", s1_prms.search_sz_t);
 #ifndef K_SIMILAR_PATCHES
-		printf("\tdth        %g\n", s1_prms.dista_th);
+			printf("\tdth        %g\n", s1_prms.dista_th);
 #else
-		printf("\tnp_t       %d\n", s1_prms.npatches_t);
-		printf("\tnp_tagg    %d\n", s1_prms.npatches_tagg);
+			printf("\tnp_t       %d\n", s1_prms.npatches_t);
+			printf("\tnp_tagg    %d\n", s1_prms.npatches_tagg);
 #endif
-		printf("\tlambda     %g\n", s1_prms.dista_lambda);
-		printf("\tbeta_t     %g\n", s1_prms.beta_t);
-		printf("\n");
+			printf("\tlambda     %g\n", s1_prms.dista_lambda);
+			printf("\tbeta_t     %g\n", s1_prms.beta_t);
+			printf("\n");
+		}
 	}
 
 	// load data [[[2
@@ -2244,28 +2291,30 @@ int main(int argc, const char *argv[])
 		float *deno0 = (f > fframe) ? warp0 : NULL;
 		nlkalman_filter_frame(bsic1, nisy1, deno0, NULL, w, h, c, sigma, f1_prms, f);
 
-		// filtering 2nd step [[[3
-		bool second_step = f2_prms.patch_sz;
-		if (second_step && f > fframe)
+		// save output
+		if (flt1_path)
 		{
-			// save output
-			sprintf(frame_name, "/tmp/bsic-%03d.png", f);
+			sprintf(frame_name, flt1_path, f);
 			iio_save_image_float_vec(frame_name, bsic1, w, h, c);
+		}
 
-			// second step
+		// filtering 2nd step [[[3
+		if (second_filt && f > fframe)
+		{
 			nlkalman_filter_frame(deno1, nisy1, deno0, bsic1, w, h, c, sigma, f2_prms, f);
 			memcpy(nisy1, deno1, whc*sizeof(float));
-
 		}
 		else
 			memcpy(nisy1, bsic1, whc*sizeof(float));
 
 		// save output
-		sprintf(frame_name, deno_path, f);
-		iio_save_image_float_vec(frame_name, nisy1, w, h, c);
+		if (flt2_path)
+		{
+			sprintf(frame_name, flt2_path, f);
+			iio_save_image_float_vec(frame_name, nisy1, w, h, c);
+		}
 
 		// smoothing [[[3
-		bool smoothing = s1_prms.patch_sz;
 		if (smoothing && f > fframe)
 		{
 			// point to previous frame
@@ -2290,15 +2339,16 @@ int main(int argc, const char *argv[])
 			// run smoother [[[4
 			nlkalman_smooth_frame(deno1, filt1, smoo0, NULL, w, h, c, sigma, s1_prms, f);
 			memcpy(filt1, deno1, whc*sizeof(float));
+		}
 
-			// save output
-			sprintf(frame_name, "/tmp/smoo-%03d.png", f-1);
+		// save output
+		if (smoothing && f > fframe)
+		{
+			sprintf(frame_name, smo1_path, f-1);
 			iio_save_image_float_vec(frame_name, deno1, w, h, c);
 		}
 	}
 
-	// save output [[[2
-//	vio_save_video_float_vec(deno_path, deno, fframe, lframe, w, h, c);
 
 	if (deno1) free(deno1);
 	if (bsic1) free(bsic1);
