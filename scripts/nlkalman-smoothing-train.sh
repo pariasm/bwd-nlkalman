@@ -58,6 +58,7 @@ do
 	n=$((n+1))
 done
 
+F1MSE=$SS
 F1RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
 F1PSNR=$(plambda -c "255 $F1RMSE / log10 20 *" 2>/dev/null)
 echo "F1 - Total RMSE $F1RMSE" >> $OUT/measures
@@ -84,6 +85,7 @@ do
 	n=$((n+1))
 done
 
+F2MSE=$SS
 F2RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
 F2PSNR=$(plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
 echo "F2 - Total RMSE $F2RMSE" >> $OUT/measures
@@ -110,12 +112,13 @@ do
 	n=$((n+1))
 done
 
+S1MSE=$SS
 S1RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
 S1PSNR=$(plambda -c "255 $S1RMSE / log10 20 *" 2>/dev/null)
 echo "S1 - Total RMSE $S1RMSE" >> $OUT/measures
 echo "S1 - Total PSNR $S1PSNR" >> $OUT/measures
 
-echo $F1PSNR $F2PSNR $S1PSNR
+printf "%f %f %f\n" $F1MSE $F2MSE $S1MSE
 
 
 # vim:set foldmethod=marker:
