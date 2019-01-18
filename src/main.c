@@ -586,8 +586,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	for (int i = 0; i < w*h; ++i) aggr1[i] = 0., mask1[i] = 0;
 
 	// compute a window (to reduce blocking artifacts)
-//	float *window = window_function("gaussian", psz);
-	float *window = window_function("constant", psz);
+	float *window = window_function("gaussian", psz);
+//	float *window = window_function("constant", psz);
 	float W[psz][psz];
 	for (int i = 0; i < psz; ++i)
 	for (int j = 0; j < psz; ++j)
@@ -900,6 +900,7 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 			if (b1) dct_threads_forward((float *)PG, dcts_pg);
 
 			float vp = 0;
+//			nagg = min(np0 ? np0 : (d0 ? 1 : np1), prms.npatches_tagg);
 			nagg = min(np0 ? np0 : np1, prms.npatches_tagg);
 			for (int n = 0; n < nagg; ++n)
 			if (np0 > 0) // enough patches with a valid previous patch [[[4
@@ -953,9 +954,11 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 			// aggregate denoised group on output image [[[3
 #ifdef WEIGHTED_AGGREGATION
-			const float w = (d0 && !np0) ? 1e-6 : 1.f/vp;
+//			const float w = (d0 && !np0) ? 1e-6 : 1.f/vp;
+			const float w = 1.f/max(vp, 1e-6);
 #else
-			const float w = (d0 && !np0) ? 1e-6 : 1.f;
+//			const float w = (d0 && !np0) ? 1e-6 : 1.f;
+			const float w = 1.f;
 #endif
 			for (int n = 0; n < nagg; ++n)
 			{
@@ -1019,8 +1022,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 	for (int i = 0; i < w*h; ++i) aggr1[i] = 0., mask1[i] = 0;
 
 	// compute a window (to reduce blocking artifacts)
-//	float *window = window_function("gaussian", psz);
-	float *window = window_function("constant", psz);
+	float *window = window_function("gaussian", psz);
+//	float *window = window_function("constant", psz);
 	float W[psz][psz];
 	for (int i = 0; i < psz; ++i)
 	for (int j = 0; j < psz; ++j)
@@ -1401,9 +1404,11 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 			// aggregate denoised group on output image [[[3
 #ifdef WEIGHTED_AGGREGATION
-			const float w = (d0 && !np0) ? 1e-6 : 1.f/vp;
+//			const float w = (d0 && !np0) ? 1e-6 : 1.f/vp;
+			const float w = 1.f/max(vp, 1e-6);
 #else
-			const float w = (d0 && !np0) ? 1e-6 : 1.f;
+//			const float w = (d0 && !np0) ? 1e-6 : 1.f;
+			const float w = 1.f;
 #endif
 			for (int n = 0; n < nagg; ++n)
 			{
@@ -1473,8 +1478,8 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 	for (int i = 0; i < w*h; ++i) aggr1[i] = 0., mask1[i] = 0;
 
 	// compute a window (to reduce blocking artifacts)
-//	float *window = window_function("gaussian", psz);
-	float *window = window_function("constant", psz);
+	float *window = window_function("gaussian", psz);
+//	float *window = window_function("constant", psz);
 	float W[psz][psz];
 	for (int i = 0; i < psz; ++i)
 	for (int j = 0; j < psz; ++j)
@@ -1862,9 +1867,11 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 
 			// aggregate denoised group on output image [[[3
 #ifdef WEIGHTED_AGGREGATION
-			const float w = !np0 ? 1e-6 : 1.f/vp;
+//			const float w = (d0 && !np0) ? 1e-6 : 1.f/vp;
+			const float w = 1.f/max(vp, 1e-6);
 #else
-			const float w = !np0 ? 1e-6 : 1.f;
+//			const float w = (d0 && !np0) ? 1e-6 : 1.f;
+			const float w = 1.f;
 #endif
 			for (int n = 0; n < nagg; ++n)
 			{
