@@ -5,12 +5,26 @@
 sigmas=(10 20 40)
 
 # number of trials
-ntrials=1
+ntrials=10000
 
 # test sequences
 seqs=(\
-derf/mobile_mono \
+train-14/dataset/boxing \
+train-14/dataset/choreography \
+train-14/dataset/demolition \
+train-14/dataset/grass-chopper \
+train-14/dataset/inflatable \
+train-14/dataset/juggle \
+train-14/dataset/kart-turn \
+train-14/dataset/lions \
+train-14/dataset/ocean-birds \
+train-14/dataset/old_town_cross \
+train-14/dataset/snow_mnt \
+train-14/dataset/swing-boy \
+train-14/dataset/varanus-tree \
+train-14/dataset/wings-turn \
 )
+
 #derf-hd-train/park_joy \
 #derf-hd-train/speed_bag \
 #derf-hd-train/station2 \
@@ -24,7 +38,7 @@ derf/mobile_mono \
 
 # seq folder
 #sf='/mnt/nas-pf/'
-sf='/home/pariasm/Work/denoising/data/'
+sf='/home/pariasm/denoising/data/'
 
 output=${1:-"trials"}
 
@@ -38,7 +52,6 @@ do
 	# choose randomly a noise level
 	r=$(awk -v M=2 -v s=$RANDOM 'BEGIN{srand(s); print int(rand()*(M+1))}')
 	s=${sigmas[$r]}
-	s=20
 
 	# parameters for first stage filtering
 	f1_p=8
@@ -88,8 +101,8 @@ do
 	f2_mse=0
 	s1_mse=0
 	nseqs=${#seqs[@]}
-	ff=70
-	lf=89
+	ff=1
+	lf=20
 	if [ ! -d $trialfolder ]
 	then
 		for seq in ${seqs[@]}

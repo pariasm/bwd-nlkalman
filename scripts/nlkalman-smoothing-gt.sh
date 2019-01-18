@@ -39,10 +39,13 @@ done
 # compute optical flow {{{1
 TVL1="$DIR/tvl1flow"
 FSCALE=1
-DW=0.15
+DW=0.30
+TH=0.75
+#FSCALE=2
+#DW=0.30
 for i in $(seq $((FFR+1)) $LFR);
 do
-	file=$(printf $OUT"/%03d_b.flo" $i)
+	file=$(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_b.flo" $i)
 	if [ ! -f $file ]
 	then
 		$TVL1 $(printf $OUT"/%03d.tif" $i) \
@@ -51,11 +54,11 @@ do
 				0 0.25 0.2 $DW 100 $FSCALE 0.5 5 0.01 0; 
 	fi
 done
-cp $(printf $OUT"/%03d_b.flo" $((FFR+1))) $(printf $OUT"/%03d_b.flo" $FFR)
+cp $(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_b.flo" $((FFR+1))) $(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_b.flo" $FFR)
 
 for i in $(seq $FFR $((LFR-1)));
 do
-	file=$(printf $OUT"/%03d_f.flo" $i)
+	file=$(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_f.flo" $i)
 	if [ ! -f $file ]
 	then
 		$TVL1 $(printf $OUT"/%03d.tif" $i) \
@@ -64,24 +67,25 @@ do
 				0 0.25 0.2 $DW 100 $FSCALE 0.5 5 0.01 0; 
 	fi
 done
-cp $(printf $OUT"/%03d_f.flo" $((LFR-1))) $(printf $OUT"/%03d_f.flo" $LFR)
+cp $(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_f.flo" $((LFR-1))) $(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_f.flo" $LFR)
 
 # compute occlusion masks {{{1
 TH=0.75
+#TH=0.50
 for i in $(seq $FFR $LFR);
 do
-	file=$(printf $OUT"/occ_%03d_b.png" $i)
+	file=$(printf $OUT"/occl_${FSCALE}_${DW}_${TH}_%03d_b.png" $i)
 	if [ ! -f $file ]
 	then
-		plambda $(printf $OUT"/%03d_b.flo" $i) \
+		plambda $(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_b.flo" $i) \
 				"x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs $TH > 255 *" \
 				-o $file
 	fi
 
-	file=$(printf $OUT"/occ_%03d_f.png" $i)
+	file=$(printf $OUT"/occl_${FSCALE}_${DW}_${TH}_%03d_f.png" $i)
 	if [ ! -f $file ]
 	then
-		plambda $(printf $OUT"/%03d_f.flo" $i) \
+		plambda $(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_f.flo" $i) \
 				"x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs $TH > 255 *" \
 				-o $file
 	fi
@@ -90,9 +94,13 @@ done
 # run denoising {{{1
 $DIR/nlkalman-bwd \
  -i $OUT"/%03d.tif" -f $FFR -l $LFR -s $SIG \
- --bflow $OUT"/%03d_b.flo" --boccl $OUT"/occ_%03d_b.png" \
- --fflow $OUT"/%03d_f.flo" --foccl $OUT"/occ_%03d_f.png" \
- --smoo1 $OUT"/deno_%03d.tif" $PRM
+ --bflow $OUT"/tvl1_${FSCALE}_${DW}_%03d_b.flo" \
+ --fflow $OUT"/tvl1_${FSCALE}_${DW}_%03d_f.flo" \
+ --boccl $OUT"/occl_${FSCALE}_${DW}_${TH}_%03d_b.png" \
+ --foccl $OUT"/occl_${FSCALE}_${DW}_${TH}_%03d_f.png" \
+ --filt1 $OUT"/flt1_${FSCALE}_${DW}_test3_%03d.tif" $PRM \
+ --filt2 $OUT"/flt2_${FSCALE}_${DW}_test3_%03d.tif" $PRM \
+ --smoo1 $OUT"/smo1_${FSCALE}_${DW}_test3_%03d.tif" $PRM
 
 ## # run denoising script
 ## $DIR/nlkalman.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT "$PRM"
@@ -101,13 +109,13 @@ $DIR/nlkalman-bwd \
 for i in $(seq $FFR $((LFR-1)));
 do
 	# we remove a band of 10 pixels from each side of the frame
-	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"deno_%03d.tif" $i) m 10)
+	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"flt2_${FSCALE}_${DW}_test3_%03d.tif" $i) m 10)
 	MM[$i]=$(plambda -c "${MM[$i]} sqrt")
 	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *")
 done
 
-echo "Frame RMSE " ${MM[*]}  > $OUT/measures
-echo "Frame PSNR " ${PP[*]} >> $OUT/measures
+echo "Frame RMSE " ${MM[*]}  > $OUT/measures_${FSCALE}_${DW}_test3
+echo "Frame PSNR " ${PP[*]} >> $OUT/measures_${FSCALE}_${DW}_test3
 
 # Global measures (from 4th frame)
 SS=0
@@ -120,8 +128,8 @@ done
 
 RMSE=$(plambda -c "$SS sqrt")
 PSNR=$(plambda -c "255 $RMSE / log10 20 *")
-echo "Total RMSE $RMSE" >> $OUT/measures
-echo "Total PSNR $PSNR" >> $OUT/measures
+echo "Total RMSE $RMSE" >> $OUT/measures_${FSCALE}_${DW}_test3
+echo "Total PSNR $PSNR" >> $OUT/measures_${FSCALE}_${DW}_test3
 
 
 # vim:set foldmethod=marker:

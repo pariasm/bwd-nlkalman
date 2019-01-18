@@ -17,14 +17,18 @@ mkdir -p $OUT
 # folders with pre-computed data
 ORIG="$SEQ/%03d.png"
 NISY="$SEQ/s${SIG}/%03d.tif"
-BFLOW="$SEQ/s${SIG}/%03d_b.flo"
-BOCCL="$SEQ/s${SIG}/occ_%03d_b.png"
-FFLOW="$SEQ/s${SIG}/%03d_f.flo"
-FOCCL="$SEQ/s${SIG}/occ_%03d_f.png"
-#BFLOW="$SEQ/s${SIG}/tvl1_%03d_b.flo"
-#BOCCL="$SEQ/s${SIG}/occl_%03d_b.png"
-#FFLOW="$SEQ/s${SIG}/tvl1_%03d_f.flo"
-#FOCCL="$SEQ/s${SIG}/occl_%03d_f.png"
+#BFLOW="$SEQ/s${SIG}/%03d_b.flo"
+#BOCCL="$SEQ/s${SIG}/occ_%03d_b.png"
+#FFLOW="$SEQ/s${SIG}/%03d_f.flo"
+#FOCCL="$SEQ/s${SIG}/occ_%03d_f.png"
+
+FSCALE=1
+DW=0.30
+TH=0.75
+BFLOW="$SEQ/s${SIG}/tvl1_${FSCALE}_${DW}_%03d_b.flo"
+FFLOW="$SEQ/s${SIG}/tvl1_${FSCALE}_${DW}_%03d_f.flo"
+BOCCL="$SEQ/s${SIG}/occl_${FSCALE}_${DW}_${TH}_%03d_b.png"
+FOCCL="$SEQ/s${SIG}/occl_${FSCALE}_${DW}_${TH}_%03d_f.png"
 
 # we assume that the binaries are in the same folder as the script
 DIR=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
