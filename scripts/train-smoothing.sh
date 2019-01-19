@@ -72,8 +72,8 @@ do
 	f2_bt=$(awk -v M=8          -v s=$RANDOM 'BEGIN{srand(s); print rand()*M}')
 	f2_nx=$(awk -v M=100 -v S=2 -v s=$RANDOM 'BEGIN{srand(s); print int(rand()*(M - S) + S)}')
 	f2_nt=$(awk -v M=100 -v S=1 -v s=$RANDOM 'BEGIN{srand(s); print int(rand()*(M - S) + S)}')
-	f2_ntagg=$(awk -v M=11  -v S=1 -v s=$RANDOM 'BEGIN{srand(s); print int(rand()*(M - S) + S)}')
-	if (( f2_ntagg > f2_nt )); then f2_ntagg=$f1_nt; fi
+	f2_ntagg=$(awk -v M=10  -v S=1 -v s=$RANDOM 'BEGIN{srand(s); print int(rand()*(M - S) + S)}')
+	if (( f2_ntagg > f2_nt )); then f2_ntagg=$f2_nt; fi
 
 	# parameters for smoothing
 	s1_p=8

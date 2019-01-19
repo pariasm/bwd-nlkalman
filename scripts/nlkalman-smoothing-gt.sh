@@ -43,6 +43,7 @@ DW=0.30
 TH=0.75
 #FSCALE=2
 #DW=0.30
+#TH=0.50
 for i in $(seq $((FFR+1)) $LFR);
 do
 	file=$(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_b.flo" $i)
@@ -70,8 +71,6 @@ done
 cp $(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_f.flo" $((LFR-1))) $(printf $OUT"/tvl1_${FSCALE}_${DW}_%03d_f.flo" $LFR)
 
 # compute occlusion masks {{{1
-TH=0.75
-#TH=0.50
 for i in $(seq $FFR $LFR);
 do
 	file=$(printf $OUT"/occl_${FSCALE}_${DW}_${TH}_%03d_b.png" $i)
