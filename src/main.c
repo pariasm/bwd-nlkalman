@@ -10,6 +10,9 @@
 
 // some macros and data types [[[1
 
+// comment to decouple the 1st filtering stage from the 2nd
+#define DECOUPLE_FILTER2
+
 // comment for patch distance using previous frame
 //#define LAMBDA_DISTANCE
 
@@ -2281,7 +2284,13 @@ int main(int argc, const char *argv[])
 		// warp previous denoised frame [[[3
 		if (f > fframe)
 		{
+#ifdef DECOUPLE_FILTER2
+			// instead of using the output of the 2nd step as
+			// previous frame, use the output of the 1st step
+			float * deno0 = bsic1;
+#else
 			float * deno0 = deno + (f - 1 - fframe)*whc;
+#endif
 			if (bflo)
 			{
 				float * flow0 = bflo + (f - fframe)*wh2;
@@ -2315,7 +2324,7 @@ int main(int argc, const char *argv[])
 			memcpy(nisy1, bsic1, whc*sizeof(float));
 
 		// save output
-		if (flt2_path)
+		if (second_filt && flt2_path)
 		{
 			sprintf(frame_name, flt2_path, f);
 			iio_save_image_float_vec(frame_name, nisy1, w, h, c);
