@@ -2317,6 +2317,19 @@ int main(int argc, const char *argv[])
 		// filtering 2nd step [[[3
 		if (second_filt && f > fframe)
 		{
+#ifdef DECOUPLE_FILTER2
+			// instead of using the output of the 2nd step as
+			// previous frame, use the output of the 1st step
+			float * deno0 = deno + (f - 1 - fframe)*whc;
+
+			if (bflo)
+			{
+				float * flow0 = bflo + (f - fframe)*wh2;
+				float * occl1 = bocc ? bocc + (f - fframe)*w*h : NULL;
+				warp_bicubic(warp0, deno0, flow0, occl1, w, h, c);
+				deno0 = warp0;
+			}
+#endif
 			nlkalman_filter_frame(deno1, nisy1, deno0, bsic1, w, h, c, sigma, f2_prms, f);
 			memcpy(nisy1, deno1, whc*sizeof(float));
 		}
