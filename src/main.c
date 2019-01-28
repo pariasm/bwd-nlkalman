@@ -2383,7 +2383,7 @@ int main(int argc, const char *argv[])
 
 	// run full video smoother - backward pass [[[2
 	if (full_smoother)
-	for (int f = lframe-2; f >= fframe; --f)
+	for (int f = lframe-1; f >= fframe; --f)
 	{
 		if (verbose) printf("processing frame %d\n", f);
 
