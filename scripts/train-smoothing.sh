@@ -96,6 +96,7 @@ do
 	params=$(printf "$params --f2_p %d --f2_sx %d --f2_st %d --f2_nx %d " $f2_p $f2_sx $f2_st $f2_nx)
 	params=$(printf "$params --f2_bx %f --f2_nt %d --f2_nt_agg %d --f2_bt %f " $f2_bx $f2_nt $f2_ntagg $f2_bt)
 	params=$(printf "$params --s1_p %d --f1_st %d --s1_nt %d --s1_nt_agg %d --s1_bt %f" $s1_p $f1_st $s1_nt $s1_ntagg $s1_bt)
+	params="$params --s1_full 1"
 
 	f1_mse=0
 	f2_mse=0
