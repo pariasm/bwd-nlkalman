@@ -1973,6 +1973,7 @@ int main(int argc, const char *argv[])
 	f2_prms.dista_lambda  = -1.;
 
 	// smoothing options
+	bool full_smoother = false; // next frame smoother or full video smoother
 	struct nlkalman_params s1_prms;
 	s1_prms.patch_sz      =  0; // -1 means automatic value
 	s1_prms.search_sz_x   = -1;
@@ -2045,6 +2046,7 @@ int main(int argc, const char *argv[])
 #endif
 		OPT_FLOAT  ( 0 , "s1_bt"    , &s1_prms.beta_t, "noise multiplier in kalman filtering"),
 		OPT_FLOAT  ( 0 , "s1_l"     , &s1_prms.dista_lambda, "noisy patch weight in patch distance"),
+		OPT_BOOLEAN( 0 , "s1_full"  , &full_smoother, "next frame (default) or full video smoothing"),
 
 		OPT_GROUP("Program options"),
 		OPT_BOOLEAN('v', "verbose", &verbose, "verbose output"),
@@ -2059,13 +2061,14 @@ int main(int argc, const char *argv[])
 
 	// determine mode
 	bool second_filt = (f2_prms.patch_sz && (flt2_path || smo1_path));
-	bool smoothing   = (s1_prms.patch_sz && smo1_path);
+	bool next_frame_smoother = (!full_smoother && s1_prms.patch_sz && smo1_path);
+	full_smoother = (full_smoother && s1_prms.patch_sz && smo1_path);
 
 	// check if output paths have been provided
 	if ((f1_prms.patch_sz == 0))
 		return fprintf(stderr, "Error: f1_p == 0, exiting\n"), 1;
 
-	if (!flt1_path && !(flt2_path && f2_prms.patch_sz) && !smoothing)
+	if (!flt1_path && !(flt2_path && f2_prms.patch_sz) && !next_frame_smoother)
 		return fprintf(stderr, "Error: no output path given for any "
 		                       "computed output - exiting\n"), 1;
 
@@ -2141,9 +2144,9 @@ int main(int argc, const char *argv[])
 			printf("\n");
 		}
 
-		if (smoothing)
+		if (next_frame_smoother || full_smoother)
 		{
-			printf("smoothing parameters:\n");
+			printf("%s smoother params:\n", full_smoother? "full": "single frame");
 			printf("\tpatch      %d\n", s1_prms.patch_sz);
 			printf("\tsearch_t   %d\n", s1_prms.search_sz_t);
 #ifndef K_SIMILAR_PATCHES
@@ -2270,7 +2273,7 @@ int main(int argc, const char *argv[])
 		}
 	}
 
-	// run denoiser [[[2
+	// run denoiser - forward pass [[[2
 	char frame_name[512];
 	const int whc = w*h*c, wh2 = w*h*2;
 	float * deno = nisy;
@@ -2344,7 +2347,7 @@ int main(int argc, const char *argv[])
 		}
 
 		// smoothing [[[3
-		if (smoothing && f > fframe)
+		if (next_frame_smoother && f > fframe)
 		{
 			// point to previous frame
 			float *filt1 = deno + (f - 1 - fframe)*whc;
@@ -2371,11 +2374,43 @@ int main(int argc, const char *argv[])
 		}
 
 		// save output
-		if (smoothing && f > fframe)
+		if (next_frame_smoother && f > fframe)
 		{
 			sprintf(frame_name, smo1_path, f-1);
 			iio_save_image_float_vec(frame_name, deno1, w, h, c);
 		}
+	}
+
+	// run full video smoother - backward pass [[[2
+	if (full_smoother)
+	for (int f = lframe-2; f >= fframe; --f)
+	{
+		if (verbose) printf("processing frame %d\n", f);
+
+		// warp next frame to current frame [[[4
+		float * smoo0 = deno + (f + 1 - fframe)*whc;
+		{
+			if (fflo)
+			{
+				float * flow0 = fflo + (f - fframe)*wh2;
+				float * occl0 = focc ? focc + (f - fframe)*w*h : NULL;
+				warp_bicubic(warp0, smoo0, flow0, occl0, w, h, c);
+			}
+			else
+				// copy without warping
+				memcpy(warp0, smoo0, whc*sizeof(float));
+
+			smoo0 = warp0;
+		}
+
+		// run smoother [[[4
+		float * filt1 = deno + (f - fframe)*whc;
+		nlkalman_smooth_frame(deno1, filt1, smoo0, NULL, w, h, c, sigma, s1_prms, f);
+		memcpy(filt1, deno1, whc*sizeof(float));
+
+		// save output
+		sprintf(frame_name, smo1_path, f);
+		iio_save_image_float_vec(frame_name, deno1, w, h, c);
 	}
 
 
