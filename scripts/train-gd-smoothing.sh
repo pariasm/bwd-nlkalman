@@ -4,51 +4,38 @@
 # noise levels
 s=20
 
-# number of iterations
-niters=10
-step=0.001
+# parameters of gradient descent
+niters=1000 # number of iterations
+step=0.01   # step to move along the gradient
+gs=0.01     # step to estimate numerical gradient
 
-seqs=(test-smoothing)
+# test sequences
+seqs=(\
+boxing \
+choreography \
+demolition \
+grass-chopper \
+inflatable \
+juggle \
+kart-turn \
+lions \
+ocean-birds \
+old_town_cross \
+snow_mnt \
+swing-boy \
+varanus-tree \
+wings-turn \
+)
 
 ff=1
-lf=2
-
-## test sequences
-#seqs=(\
-#train-14/dataset/boxing \
-#train-14/dataset/choreography \
-#train-14/dataset/demolition \
-#train-14/dataset/grass-chopper \
-#train-14/dataset/inflatable \
-#train-14/dataset/juggle \
-#train-14/dataset/kart-turn \
-#train-14/dataset/lions \
-#train-14/dataset/ocean-birds \
-#train-14/dataset/old_town_cross \
-#train-14/dataset/snow_mnt \
-#train-14/dataset/swing-boy \
-#train-14/dataset/varanus-tree \
-#train-14/dataset/wings-turn \
-#)
-
-#derf-hd-train/park_joy \
-#derf-hd-train/speed_bag \
-#derf-hd-train/station2 \
-#derf-hd-train/sunflower \
-#derf-hd-train/tractor \
-# derf/bus_mono \
-# derf/foreman_mono \
-# derf/football_mono \
-# derf/tennis_mono \
-# derf/stefan_mono \
+lf=20
 
 # seq folder
-#sf='/home/pariasm/Work/denoising/data/'
-sf='/home/pariasm/Work/denoising/projects/bwd-nlkalman/build/'
+sf='/home/pariasm/denoising/data/train-14/dataset/'
 
 output=${1:-"trials"}
 
-export OMP_NUM_THREADS=1
+#export OMP_NUM_THREADS=1
 
 # we assume that the binaries are in the same folder as the script
 BIN=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
@@ -87,12 +74,14 @@ function nlk {
 	f2_bt="$4"
 	s1_bt="$5"
 
-	trialfolder=$(printf "$output/s%02d-nx%02dbx%05.2fnt%02dnta%02dbt%05.2f" \
-		$s $f1_nx $f1_bx $f1_nt $f1_ntagg $f1_bt)
-	trialfolder=$(printf "${trialfolder}-nx%02dbx%05.2fnt%02dnta%02dbt%05.2f" \
-		$f2_nx $f2_bx $f2_nt $f2_ntagg $f2_bt)
-	trialfolder=$(printf "${trialfolder}-nt%02dbt%05.2f\n" \
-		$s1_nt $s1_bt)
+#	folder=$(printf "$output/s%02d-nx%02dbx%05.2fnt%02dnta%02dbt%05.2f" \
+#		$s $f1_nx $f1_bx $f1_nt $f1_ntagg $f1_bt)
+#	folder=$(printf "${folder}-nx%02dbx%05.2fnt%02dnta%02dbt%05.2f" \
+#		$f2_nx $f2_bx $f2_nt $f2_ntagg $f2_bt)
+#	folder=$(printf "${folder}-nt%02dbt%05.2f\n" \
+#		$s1_nt $s1_bt)
+	folder="$output/tmp/"
+	mkdir -p $folder
 
 	params=$(printf " --f1_p %d --f1_sx %d --f1_st %d --f1_nx %d " $f1_p $f1_sx $f1_st $f1_nx)
 	params=$(printf "$params --f1_bx %f --f1_nt %d --f1_nt_agg %d --f1_bt %f " $f1_bx $f1_nt $f1_ntagg $f1_bt)
@@ -101,12 +90,18 @@ function nlk {
 	params=$(printf "$params --s1_p %d --f1_st %d --s1_nt %d --s1_nt_agg %d --s1_bt %f" $s1_p $f1_st $s1_nt $s1_ntagg $s1_bt)
 	params="$params --s1_full 1"
 
+	T=$BIN/nlkalman-smoothing-train.sh
+	for seq in ${seqs[@]}; do
+		echo "$T ${sf}${seq} $ff $lf $s $folder/$seq  \"$params\" > $folder/${seq}-out"
+	done | parallel
+
 	f1_mse=0
 	f2_mse=0
 	s1_mse=0
 	nseqs=${#seqs[@]}
 	for seq in ${seqs[@]}; do
-		out=$($BIN/nlkalman-smoothing-train.sh ${sf}${seq} $ff $lf $s $trialfolder  "$params")
+#		out=$($T ${sf}${seq} $ff $lf $s $folder/$seq  "$params")
+		out=$(cat $folder/${seq}-out)
 		read -ra mse <<< "$out"
 		f1_mse=$(echo "$f1_mse + ${mse[0]}/$nseqs" | bc -l)
 		f2_mse=$(echo "$f2_mse + ${mse[1]}/$nseqs" | bc -l)
@@ -116,7 +111,6 @@ function nlk {
 }
 
 # gradient descent
-gs=0.01 # gradient step
 for ((i=0; i < $niters; i++))
 do
 	# performance of current point
