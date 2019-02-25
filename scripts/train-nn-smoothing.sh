@@ -6,7 +6,7 @@ s=20
 
 # parameters of gradient descent
 niters=1000 # number of iterations
-gs=1        # step
+gs=5        # step
 
 # test sequences
 seqs=(\
@@ -27,7 +27,7 @@ wings-turn \
 )
 
 ff=1
-lf=12
+lf=20
 
 # seq folder
 sf='/home/pariasm/denoising/data/train-14/dataset/'
@@ -45,23 +45,23 @@ f1_p=8
 f1_sx=10
 f1_st=5
 f1_nx=95
-f1_nt=51
-f1_ntagg=6
+f1_nt=40
+f1_ntagg=5
 f1_bx=3.64
 f1_bt=2.23
 
 f2_p=8
 f2_sx=10
 f2_st=5
-f2_nx=40
-f2_nt=21
+f2_nx=25
+f2_nt=15
 f2_ntagg=1
 f2_bx=0.25
 f2_bt=1.53
 
 s1_p=8
 s1_st=5
-s1_nt=75
+s1_nt=45
 s1_ntagg=$s1_nt
 s1_bt=5.79
 
@@ -112,10 +112,13 @@ f1_mse=${mse[0]}
 f2_mse=${mse[1]}
 s1_mse=${mse[2]}
 P=1
+PP=1
 
 # linear search
-for ((i=0; i < $niters; i++))
+while (( $PP ))
 do
+	PP=0
+
 	if (( $P )); then
 		printf "%02d %03.0f %08.5f %03.0f %03.0f %08.5f %03.0f %08.5f %03.0f %02d %08.5f %03.0f %08.5f %9.6f %9.6f %9.6f\n" \
 			$s $f1_nx $f1_bx $f1_nt $f1_ntagg $f1_bt $f2_nx $f2_bx $f2_nt $f2_ntagg $f2_bt $s1_nt $s1_bt \
@@ -130,13 +133,13 @@ do
 	read -ra mse <<< "$outp"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		f1_nx=$(plambda -c "$f1_nx $gs +");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	read -ra mse <<< "$outm"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		f1_nx=$(plambda -c "$f1_nx $gs -");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	if (( $P )); then
@@ -153,13 +156,13 @@ do
 	read -ra mse <<< "$outp"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		f1_nt=$(plambda -c "$f1_nt $gs +");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	read -ra mse <<< "$outm"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		f1_nt=$(plambda -c "$f1_nt $gs -");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	if (( $P )); then
@@ -169,20 +172,20 @@ do
 	fi
 
 	# f1_ntagg
-	outp=$(nlk $f1_nx $f1_nt $(plambda -c "$f1_ntagg $gs +") $f2_nx $f2_nt $s1_nt)
-	outm=$(nlk $f1_nx $f1_nt $(plambda -c "$f1_ntagg $gs -") $f2_nx $f2_nt $s1_nt)
+	outp=$(nlk $f1_nx $f1_nt $(plambda -c "$f1_ntagg 1 +") $f2_nx $f2_nt $s1_nt)
+	outm=$(nlk $f1_nx $f1_nt $(plambda -c "$f1_ntagg 1 -") $f2_nx $f2_nt $s1_nt)
 
 	P=0
 	read -ra mse <<< "$outp"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
-		f1_ntagg=$(plambda -c "$f1_ntagg $gs +");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_ntagg=$(plambda -c "$f1_ntagg 1 +");
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	read -ra mse <<< "$outm"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
-		f1_ntagg=$(plambda -c "$f1_ntagg $gs -");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_ntagg=$(plambda -c "$f1_ntagg 1 -");
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	if (( $P )); then
@@ -199,13 +202,13 @@ do
 	read -ra mse <<< "$outp"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		f2_nx=$(plambda -c "$f2_nx $gs +");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	read -ra mse <<< "$outm"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		f2_nx=$(plambda -c "$f2_nx $gs -");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	if (( $P )); then
@@ -222,13 +225,13 @@ do
 	read -ra mse <<< "$outp"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		f2_nt=$(plambda -c "$f2_nt $gs +");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	read -ra mse <<< "$outm"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		f2_nt=$(plambda -c "$f2_nt $gs -");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	if (( $P )); then
@@ -245,12 +248,12 @@ do
 	read -ra mse <<< "$outp"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		s1_nt=$(plambda -c "$s1_nt $gs +");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 
 	read -ra mse <<< "$outm"
 	if (( $(bc -l <<< "${mse[2]} < $s1_mse") )); then 
 		s1_nt=$(plambda -c "$s1_nt $gs -");
-		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1
+		f1_mse=${mse[0]}; f2_mse=${mse[1]}; s1_mse=${mse[2]}; P=1; PP=1
 	fi
 done
