@@ -30,7 +30,7 @@ ff=1
 lf=20
 
 # seq folder
-sf='/home/pariasm/denoising/data/train-14/dataset/'
+sf='/home/pariasm/denoising/data/train-14/dataset-rgb/'
 
 output=${1:-"trials"}
 
@@ -39,31 +39,60 @@ output=${1:-"trials"}
 # we assume that the binaries are in the same folder as the script
 BIN=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 
-
 # initial parameters
 f1_p=8
-f1_sx=10
-f1_st=5
-f1_nx=95
-f1_nt=40
-f1_ntagg=5
-f1_bx=3.64
-f1_bt=2.23
-
 f2_p=8
-f2_sx=10
-f2_st=5
-f2_nx=25
-f2_nt=15
-f2_ntagg=1
-f2_bx=0.25
-f2_bt=1.53
-
 s1_p=8
+f1_sx=10
+f2_sx=10
+f1_st=5
+f2_st=5
 s1_st=5
+
+# # sigma 10
+# f1_nx=45
+# f1_nt=30
+# f1_ntagg=20
+# f1_bx=3.51
+# f1_bt=2.00
+# f2_nx=10
+# f2_nt=5
+# f2_ntagg=1
+# f2_bx=0.25
+# f2_bt=1.52
+# s1_nt=15
+# s1_ntagg=$s1_nt
+# s1_bt=6.6
+
+# sigma 20
+f1_nx=50
+f1_nt=30
+f1_ntagg=20
+f1_bx=3.11
+f1_bt=1.95
+f2_nx=20
+f2_nt=20
+f2_ntagg=1
+f2_bx=0.29
+f2_bt=1.66
 s1_nt=45
 s1_ntagg=$s1_nt
-s1_bt=5.79
+s1_bt=5.20
+
+# # sigma 40
+# f1_nx=60
+# f1_nt=30
+# f1_ntagg=20
+# f1_bx=2.31
+# f1_bt=1.85
+# f2_nx=30
+# f2_nt=40
+# f2_ntagg=1
+# f2_bx=0.37
+# f2_bt=1.94
+# s1_nt=105
+# s1_ntagg=$s1_nt
+# s1_bt=2.4
 
 # function to run the algorithm
 function nlk {
