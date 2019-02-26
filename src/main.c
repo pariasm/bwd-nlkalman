@@ -1981,9 +1981,9 @@ int main(int argc, const char *argv[])
 	f2_prms.dista_lambda  = -1.;
 
 	// smoothing options
-	bool full_smoother = false; // next frame smoother or full video smoother
+	bool full_smoother = true; // next frame smoother or full video smoother
 	struct nlkalman_params s1_prms;
-	s1_prms.patch_sz      = -1; // -1 means automatic value
+	s1_prms.patch_sz      = 0; // -1 means automatic value
 	s1_prms.search_sz_x   = -1;
 	s1_prms.search_sz_t   = -1;
 #ifndef K_SIMILAR_PATCHES
