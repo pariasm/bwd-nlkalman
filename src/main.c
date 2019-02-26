@@ -168,6 +168,48 @@ void warp_bicubic(float *imw, float *im, float *of, float *msk,
 	return;
 }
 
+// opponent color transform [[[1
+
+void rgb2opp(float *im, int w, int h, int ch)
+{
+	if (ch != 3) return;
+
+	const int wh = w*h;
+	const float a = 1.f / sqrtf(3.f);
+	const float b = 1.f / sqrtf(2.f);
+	const float c = 2.f * a * sqrtf(2.f);
+	float *p_im = im;
+	for (int k = 0; k < wh; ++k, p_im += 3)
+	{
+		float Y = a * (      p_im[0] +      p_im[1] +         p_im[2]);
+		float U = b * (      p_im[0]                -         p_im[2]);
+		float V = c * (0.25f*p_im[0] - 0.5f*p_im[1] + 0.25f * p_im[2]);
+		p_im[0] = Y;
+		p_im[1] = U;
+		p_im[2] = V;
+	}
+}
+
+void opp2rgb(float *im, int w, int h, int ch)
+{
+	if (ch != 3) return;
+
+	const int wh = w*h;
+	const float a = 1.f / sqrtf(3.f);
+	const float b = 1.f / sqrtf(2.f);
+	const float c = a / b;
+	float *p_im = im;
+	for (int k = 0; k < wh; ++k, p_im += 3)
+	{
+		float R = a * p_im[0] + b * p_im[1] + 0.5f * c * p_im[2];
+		float G = a * p_im[0]               -        c * p_im[2];
+		float B = a * p_im[0] - b * p_im[1] + 0.5f * c * p_im[2];
+		p_im[0] = R;
+		p_im[1] = G;
+		p_im[2] = B;
+	}
+}
+
 // dct handler [[[1
 
 // dct implementation: using fftw or as a matrix product
@@ -2316,13 +2358,16 @@ int main(int argc, const char *argv[])
 		// filtering 1st step [[[3
 		float *nisy1 = nisy + (f - fframe)*whc;
 		float *deno0 = (f > fframe) ? warp0 : NULL;
+		rgb2opp(nisy1, w, h, c);
 		nlkalman_filter_frame(bsic1, nisy1, deno0, NULL, w, h, c, sigma, f1_prms, f);
 
 		// save output
 		if (flt1_path)
 		{
 			sprintf(frame_name, flt1_path, f);
+			opp2rgb(bsic1, w, h, c);
 			iio_save_image_float_vec(frame_name, bsic1, w, h, c);
+			rgb2opp(bsic1, w, h, c);
 		}
 
 		// filtering 2nd step [[[3
@@ -2351,7 +2396,9 @@ int main(int argc, const char *argv[])
 		if (second_filt && flt2_path)
 		{
 			sprintf(frame_name, flt2_path, f);
+			opp2rgb(nisy1, w, h, c);
 			iio_save_image_float_vec(frame_name, nisy1, w, h, c);
+			rgb2opp(nisy1, w, h, c);
 		}
 
 		// smoothing [[[3
@@ -2385,7 +2432,9 @@ int main(int argc, const char *argv[])
 		if (next_frame_smoother && f > fframe)
 		{
 			sprintf(frame_name, smo1_path, f-1);
+			opp2rgb(deno1, w, h, c);
 			iio_save_image_float_vec(frame_name, deno1, w, h, c);
+//			rgb2opp(deno1, w, h, c);
 		}
 	}
 
@@ -2418,7 +2467,9 @@ int main(int argc, const char *argv[])
 
 		// save output
 		sprintf(frame_name, smo1_path, f);
+		opp2rgb(deno1, w, h, c);
 		iio_save_image_float_vec(frame_name, deno1, w, h, c);
+		rgb2opp(deno1, w, h, c);
 	}
 
 
