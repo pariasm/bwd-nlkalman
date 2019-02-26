@@ -481,61 +481,68 @@ struct nlkalman_params
 };
 
 // set default parameters as a function of sigma
-void nlkalman_default_params(struct nlkalman_params * p, float sigma)
+enum FILTER_MODE {FLT1, FLT2, SMO1};
+
+void nlkalman_default_params(struct nlkalman_params * p, float sigma, enum FILTER_MODE mode)
 {
-	/* we trained using two different datasets (both grayscale):
-	 * - derfhd: videos of half hd resolution obtained by downsampling
-	 *           some hd videos from the derf database
-	 * - derfcif: videos of cif resolution also of the derf db
-	 *
-	 * we found that the optimal parameters differ. in both cases, the relevant
-	 * parameters were the patch distance threshold and the b_t coefficient that
-	 * controls the amount of temporal averaging.
-	 *
-	 * with the derfhd videos, the distance threshold is lower (i.e. patches
-	 * are required to be at a smallest distance to be considered 'similar',
-	 * and the temporal averaging is higher.
-	 *
-	 * the reason for the lowest distance threshold is that the derfhd videos
-	 * are smoother than the cif ones. in fact, the cif ones are not properly
-	 * sampled and have a considerable amount of aliasing. this high frequencies
-	 * increase the distance between similar patches.
-	 *
-	 * i don't know which might be the reason for the increase in the temporal
-	 * averaging factor. perhaps that (a) the optical flow can be better estimated
-	 * (b) there are more homogeneous regions. in the case of (b), even if the oflow
-	 * is not correct, increasing the temporal averaging at these homogeneous regions
-	 * might lead to a global decrease in psnr */
-#define DERFHD_PARAMS
-#ifdef DERFHD_PARAMS
-	if (p->patch_sz      < 0) p->patch_sz      = 8;  // not tuned
-	if (p->search_sz_x   < 0) p->search_sz_x   = 10; // not tuned
-	if (p->search_sz_t   < 0) p->search_sz_t   = 10; // not tuned
- #ifndef K_SIMILAR_PATCHES
-	if (p->dista_th      < 0) p->dista_th      = .5*sigma + 15.0;
- #else
-	if (p->npatches_x    < 0) p->npatches_x    = 32;
-	if (p->npatches_t    < 0) p->npatches_t    = 32;
-	if (p->npatches_tagg < 0) p->npatches_tagg = 1;
- #endif
-	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0;
-	if (p->beta_x        < 0) p->beta_x        = 3.0;
-	if (p->beta_t        < 0) p->beta_t        = 0.05*sigma + 6.0;
-#else // DERFCIF_PARAMS
-	if (p->patch_sz      < 0) p->patch_sz      = 8;  // not tuned
-	if (p->search_sz_x   < 0) p->search_sz_x   = 10; // not tuned
-	if (p->search_sz_t   < 0) p->search_sz_t   = 10; // not tuned
- #ifndef K_SIMILAR_PATCHES
-	if (p->dista_th      < 0) p->dista_th      = (60. - 38.)*(sigma - 10.) + 38.0;
- #else
-	if (p->npatches_x    < 0) p->npatches_x    = 32;
-	if (p->npatches_t    < 0) p->npatches_t    = 32;
-	if (p->npatches_tagg < 0) p->npatches_tagg = 1;
- #endif
-	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0;
-	if (p->beta_x        < 0) p->beta_x        = 2.4;
-	if (p->beta_t        < 0) p->beta_t        = 4.5;
-#endif
+//	// DERFHD_PARAMS - single filtering step, with distance threshold
+//	/* trained for grayscale using
+//	 * - derfhd: videos of half hd resolution obtained by downsampling
+//	 *           some hd videos from the derf database
+//	 *
+//	 * the relevant parameters were the patch distance threshold and the b_t
+//	 * coefficient that controls the amount of temporal averaging. */
+//
+//	if (p->patch_sz      < 0) p->patch_sz      = 8;  // not tuned
+//	if (p->search_sz_x   < 0) p->search_sz_x   = 10; // not tuned
+//	if (p->search_sz_t   < 0) p->search_sz_t   = 10; // not tuned
+//	if (p->dista_th      < 0) p->dista_th      = .5*sigma + 15.0;
+//	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0;
+//	if (p->beta_x        < 0) p->beta_x        = 3.0;
+//	if (p->beta_t        < 0) p->beta_t        = 0.05*sigma + 6.0;
+
+	/* TRAIN14_PARAMS 
+	 * - two filtering steps + full smoothing
+	 * - using k-nn in all steps
+	 * 
+	 * Trained using 12 sequences from the DAVIS test-challenge dataset plus 2
+	 * sequences from DERFHD (old_town_cross and snow_mnt) which have a much
+	 * more steady motion. The sequences were dowscaled to 960x540, cropped to
+	 * 400x400 and converted to grayscale by channel averaging. Each has 20
+	 * frames. The PSNR was computed for the last 10 frames and with 10 pixel
+	 * border of the frame removed. */
+
+	if (p->patch_sz      < 0) p->patch_sz      = 8;   // not tuned
+	if (p->search_sz_x   < 0) p->search_sz_x   = 10;  // not tuned
+	if (p->search_sz_t   < 0) p->search_sz_t   =  5;  // not tuned
+	if (p->dista_lambda  < 0) p->dista_lambda  = 1.0; // not tuned
+
+	switch (mode)
+	{
+		case FLT1:
+			if (p->npatches_x    < 0) p->npatches_x    = (int)(0.5*sigma + 40.);
+			if (p->beta_x        < 0) p->beta_x        = -0.04*sigma + 3.91;
+			if (p->npatches_t    < 0) p->npatches_t    = 30;
+			if (p->npatches_tagg < 0) p->npatches_tagg = 20;
+			if (p->beta_t        < 0) p->beta_t        = -0.005*sigma + 2.05;
+			break;
+
+		case FLT2:
+			if (p->npatches_x    < 0) p->npatches_x    = (int)(0.5*sigma + 10.);
+			if (p->beta_x        < 0) p->beta_x        = 0.004*sigma + 0.21;
+			if (p->npatches_t    < 0) p->npatches_t    = (int)(max(5,sigma));
+			if (p->npatches_tagg < 0) p->npatches_tagg = 1;
+			if (p->beta_t        < 0) p->beta_t        = 0.014*sigma + 1.38;
+			break;
+
+		case SMO1:
+			if (p->npatches_x    < 0) p->npatches_x    = 0;
+			if (p->beta_x        < 0) p->beta_x        = 0;
+			if (p->npatches_t    < 0) p->npatches_t    = (int)(max(5, 3*sigma - 15));
+			if (p->npatches_tagg < 0) p->npatches_tagg = p->npatches_t;
+			if (p->beta_t        < 0) p->beta_t        = max(1.0, -0.14*sigma + 8.0);
+			break;
+	}
 }
 
 struct patch_distance
@@ -1976,7 +1983,7 @@ int main(int argc, const char *argv[])
 	// smoothing options
 	bool full_smoother = false; // next frame smoother or full video smoother
 	struct nlkalman_params s1_prms;
-	s1_prms.patch_sz      =  0; // -1 means automatic value
+	s1_prms.patch_sz      = -1; // -1 means automatic value
 	s1_prms.search_sz_x   = -1;
 	s1_prms.search_sz_t   = -1;
 #ifndef K_SIMILAR_PATCHES
@@ -2086,15 +2093,15 @@ int main(int argc, const char *argv[])
 		                "be stored in %s\n", smo1_path);
 
 	// default value for noise-dependent params
-	nlkalman_default_params(&f1_prms, sigma);
-	nlkalman_default_params(&f2_prms, sigma);
-	nlkalman_default_params(&s1_prms, sigma);
+	nlkalman_default_params(&f1_prms, sigma, FLT1);
+	nlkalman_default_params(&f2_prms, sigma, FLT2);
+	nlkalman_default_params(&s1_prms, sigma, SMO1);
 
 	// print parameters
 	if (verbose)
 	{
 		printf("data input:\n");
-		printf("\tnoise         %5.2f\n", sigma);
+		printf("\tnoise         %05.2f\n", sigma);
 		printf("\tfirst frame   %d\n", fframe);
 		printf("\tlast frame    %d\n", lframe);
 		printf("\tnoisy frames  %s\n", nisy_path);
