@@ -24,7 +24,7 @@ OCCL="$SEQ/s${SIG}/occl_%03d_b.png"
 DIR=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 
 # run denoising
-$DIR/nlkalman-bwd \
+$DIR/nlkalman-seq \
  -i $NISY -o $FLOW -k $OCCL -f $FFR -l $LFR -s $SIG \
  -d $OUT"/deno_%03d.tif" $PRM
 

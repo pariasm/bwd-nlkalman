@@ -91,7 +91,7 @@ do
 done
 
 # run denoising {{{1
-$DIR/nlkalman-bwd \
+$DIR/nlkalman-seq \
  -i $OUT"/%03d.tif" -f $FFR -l $LFR -s $SIG \
  --bflow $OUT"/tvl1_${FSCALE}_${DW}_%03d_b.flo" \
  --fflow $OUT"/tvl1_${FSCALE}_${DW}_%03d_f.flo" \

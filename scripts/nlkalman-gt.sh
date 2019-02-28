@@ -101,14 +101,14 @@ done
 # run denoising {{{1
 if [ $SMOO ]
 then
-	echo $DIR/nlkalman-bwd -i $OUT"/%03d.tif" \
+	echo $DIR/nlkalman-seq -i $OUT"/%03d.tif" \
 	 --bflow $OUT"/%03d_b.flo" --boccl $OUT"/occ_%03d_b.png" \
 	 --fflow $OUT"/%03d_f.flo" --foccl $OUT"/occ_%03d_f.png" \
 	 -f $FFR -l $LFR -s $SIG $PRM \
 	 --filt1 $OUT"/flt1-%03d.tif" \
 	 --filt2 $OUT"/flt2-%03d.tif" \
 	 --smoo1 $OUT"/smo1-%03d.tif"
-	$DIR/nlkalman-bwd -i $OUT"/%03d.tif" \
+	$DIR/nlkalman-seq -i $OUT"/%03d.tif" \
 	 --bflow $OUT"/%03d_b.flo" --boccl $OUT"/occ_%03d_b.png" \
 	 --fflow $OUT"/%03d_f.flo" --foccl $OUT"/occ_%03d_f.png" \
 	 -f $FFR -l $LFR -s $SIG $PRM \
@@ -116,12 +116,12 @@ then
 	 --filt2 $OUT"/flt2-%03d.tif" \
 	 --smoo1 $OUT"/smo1-%03d.tif"
 else
-	echo $DIR/nlkalman-bwd \
+	echo $DIR/nlkalman-seq \
 	 -i $OUT"/%03d.tif" -o $OUT"/%03d_b.flo" -k $OUT"/occ_%03d_b.png" \
 	 -f $FFR -l $LFR -s $SIG $PRM \
 	 --filt1 $OUT"/flt1-%03d.tif" \
 	 --filt2 $OUT"/flt2-%03d.tif"
-	$DIR/nlkalman-bwd \
+	$DIR/nlkalman-seq \
 	 -i $OUT"/%03d.tif" -o $OUT"/%03d_b.flo" -k $OUT"/occ_%03d_b.png" \
 	 -f $FFR -l $LFR -s $SIG $PRM \
 	 --filt1 $OUT"/flt1-%03d.tif" \

@@ -34,7 +34,7 @@ FOCCL="$SEQ/s${SIG}/occl_${FSCALE}_${DW}_${TH}_%03d_f.png"
 DIR=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 
 # run denoising
-$DIR/nlkalman-bwd \
+$DIR/nlkalman-seq \
  -i $NISY --bflow $BFLOW --boccl $BOCCL --fflow $FFLOW --foccl $FOCCL \
  -f $FFR -l $LFR -s $SIG $PRM \
  --filt1 $OUT"/flt1-%03d.tif" \
