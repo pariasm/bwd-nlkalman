@@ -31,7 +31,7 @@ ff=1
 lf=20
 
 # seq folder
-sf='/home/pariasm/denoising/data/train-14/dataset/'
+sf='/home/pariasm/denoising/data/train-14/dataset-rgb/'
 
 output=${1:-"trials"}
 
@@ -45,10 +45,10 @@ f1_p=8
 f1_sx=10
 f1_st=5
 f1_nx=50
-f1_nt=20
+f1_nt=30
 f1_ntagg=20
-f1_bx=3.64 # trainable
-f1_bt=2.23 # trainable
+f1_bx=3.11 # trainable
+f1_bt=1.95 # trainable
 
 f2_p=8
 f2_sx=10
@@ -56,14 +56,14 @@ f2_st=5
 f2_nx=20
 f2_nt=20
 f2_ntagg=1
-f2_bx=0.25 # trainable
-f2_bt=1.53 # trainable
+f2_bx=0.29 # trainable
+f2_bt=1.66 # trainable
 
 s1_p=8
 s1_st=5
 s1_nt=45
 s1_ntagg=$s1_nt
-s1_bt=5.79 # trainable
+s1_bt=5.20 # trainable
 
 # function to run the algorithm
 function nlk {
