@@ -30,9 +30,10 @@ find_library (FFTWF_LIBRARIES NAMES fftw3f)
 
 # add project directories #####################################################
 
-add_subdirectory(lib/iio)      # image i/o
-add_subdirectory(lib/tvl1flow) # tvl1 optical flow
-add_subdirectory(lib/argparse) # command line parsing
+add_subdirectory(lib/iio)        # image i/o
+add_subdirectory(lib/tvl1flow)   # tvl1 optical flow
+add_subdirectory(lib/argparse)   # command line parsing
+add_subdirectory(lib/multiscale) # multiscaler
 add_subdirectory(src)
 add_subdirectory(scripts)
 
