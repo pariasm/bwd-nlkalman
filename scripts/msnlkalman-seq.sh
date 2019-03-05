@@ -110,9 +110,12 @@ if [[ $SPM == "no" ]]; then exit 0; fi
 # last frame
 for l in $(seq $((PYR_LVL-1)) -1 0)
 do
-	ln -srf $(printf "$OUT/ms%d-flt2-%03d.tif"  $l $LFR) \
-	        $(printf "$OUT/ms%d-smo1-%03d.tif"  $l $LFR)
+	ln -sf $(printf      "ms%d-flt2-%03d.tif"  $l $LFR) \
+	       $(printf "$OUT/ms%d-smo1-%03d.tif"  $l $LFR)
+#	ln -srf $(printf "$OUT/ms%d-flt2-%03d.tif"  $l $LFR) \
+#	        $(printf "$OUT/ms%d-smo1-%03d.tif"  $l $LFR)
 done
+ln -sf $(printf "flt2-%03d.tif" $LFR) $(printf "$OUT/smo1-%03d.tif" $LFR)
 
 NLKS="$DIR/nlkalman-smo"
 for i in $(seq $((LFR-1)) -1 $FFR)
