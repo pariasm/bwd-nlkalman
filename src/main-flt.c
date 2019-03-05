@@ -12,21 +12,21 @@
 
 // 'usage' message in the command line
 static const char *const usages[] = {
-	"nlkalman-filter [options] [[--] args]",
-	"nlkalman-filter [options]",
+	"nlkalman-flt [options] [[--] args]",
+	"nlkalman-flt [options]",
 	NULL,
 };
 
-// frame-by-frame main [[[1
+// frame-by-frame filtering main
 int main(int argc, const char *argv[])
 {
 	omp_set_num_threads(2);
 	// parse command line [[[2
 
 	// command line parameters and their defaults
-	const char *noisy_path = NULL; // input noisy frames path
-	const char *bflow_path = NULL; // input bwd flows path
-	const char *boccl_path = NULL; // input bwd occlusions path
+	const char *noisy_path = NULL; // input noisy frame path
+	const char *bflow_path = NULL; // input bwd flow path
+	const char *boccl_path = NULL; // input bwd occlusion path
 	const char *flt10_path = NULL; // input previous first filtering path
 	const char *flt20_path = NULL; // input previous second filtering path
 	const char *flt11_path = NULL; // output first filtering path
@@ -70,7 +70,7 @@ int main(int argc, const char *argv[])
 	// configure command line parser
 	struct argparse_option options[] = {
 		OPT_HELP(),
-		OPT_GROUP("Data i/o options (all paths in printf format)"),
+		OPT_GROUP("Data i/o options"),
 		OPT_STRING ('i', "nisy" , &noisy_path, "input noisy frames path"),
 		OPT_STRING ('o', "bflo" , &bflow_path, "input bwd flow path"),
 		OPT_STRING ('k', "bocc" , &boccl_path, "input bwd occlusion masks path"),
@@ -119,7 +119,7 @@ int main(int argc, const char *argv[])
 	// parse command line
 	struct argparse argparse;
 	argparse_init(&argparse, options, usages, 0);
-	argparse_describe(&argparse, "\nA video denoiser based on non-local means.", "");
+	argparse_describe(&argparse, "\nPatch-based Kalman filter for video denoising.", "");
 	argc = argparse_parse(&argparse, argc, argv);
 
 	// hack around argparse bug
@@ -313,9 +313,7 @@ int main(int argc, const char *argv[])
 	}
 
 	// run denoiser - forward pass [[[2
-	char frame_name[512];
 	const int whc = w*h*c, wh2 = w*h*2;
-	float * deno = nisy;
 	float * warp0 = malloc(whc*sizeof(float));
 	float * flt11 = malloc(whc*sizeof(float));
 
