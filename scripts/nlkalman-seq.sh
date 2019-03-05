@@ -93,14 +93,14 @@ SMO1="$OUT/smo1-%03d.tif"
 # last frame
 ln -srf $(printf $FLT2 $LFR) $(printf $SMO1 $LFR)
 
-for i in $(seq $((LFR-1)) -1 $FFR);
+for i in $(seq $((LFR-1)) -1 $FFR)
 do
 
 	# compute forward optical flow {{{2
 	file=$(printf $FLOW $i)
 	if [ ! -f $file ]; then
 		$TVL1 $(printf $FLT2 $i) \
-		      $(printf $FLT2 $((i+1))) \
+		      $(printf $SMO1 $((i+1))) \
 		      $file \
 		      0 0.25 0.2 $DW 100 $FSCALE 0.5 5 0.01 0;
 	fi
