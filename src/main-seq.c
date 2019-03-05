@@ -95,6 +95,7 @@ int main(int argc, const char *argv[])
 	int fframe = 0, lframe = -1;
 	float sigma = 0.f;
 	bool verbose = false;
+	int  verbose_int = 0; // hack around bug in argparse
 
 	// first filtering options
 	struct nlkalman_params f1_prms;
@@ -205,7 +206,8 @@ int main(int argc, const char *argv[])
 		OPT_BOOLEAN( 0 , "s1_full"  , &full_smoother, "next frame (default) or full video smoothing"),
 
 		OPT_GROUP("Program options"),
-		OPT_BOOLEAN('v', "verbose", &verbose, "verbose output"),
+//		OPT_BOOLEAN('v', "verbose", &verbose    , "verbose output"),
+		OPT_INTEGER('v', "verbose", &verbose_int, "verbose output"),
 		OPT_END(),
 	};
 
@@ -214,6 +216,9 @@ int main(int argc, const char *argv[])
 	argparse_init(&argparse, options, usages, 0);
 	argparse_describe(&argparse, "\nA video denoiser based on non-local means.", "");
 	argc = argparse_parse(&argparse, argc, argv);
+
+	// hack around argparse bug
+	verbose = (bool)verbose_int;
 
 	// determine mode
 	bool second_filt = (f2_prms.patch_sz && (flt2_path || smo1_path));
