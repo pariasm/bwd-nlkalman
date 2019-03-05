@@ -938,8 +938,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// normalize output [[[2
 	for (int i = 0, j = 0; i < w*h; ++i)
-	for (int c = 0; c < ch ; ++c, ++j)
-		deno1[j] /= aggr1[i];
+		if (aggr1[i] > 1e-6) for (int c = 0; c < ch; ++c, ++j) deno1[j]/= aggr1[i];
+		else                 for (int c = 0; c < ch; ++c, ++j) deno1[j] = nisy1[j];
 
 	// free allocated mem and quit
 	dct_threads_destroy(dcts);
@@ -1388,8 +1388,8 @@ void nlkalman_filter_frame(float *deno1, float *nisy1, float *deno0, float *bsic
 
 	// normalize output [[[2
 	for (int i = 0, j = 0; i < w*h; ++i)
-	for (int c = 0; c < ch ; ++c, ++j)
-		deno1[j] /= aggr1[i];
+		if (aggr1[i] > 1e-6) for (int c = 0; c < ch; ++c, ++j) deno1[j]/= aggr1[i];
+		else                 for (int c = 0; c < ch; ++c, ++j) deno1[j] = nisy1[j];
 
 	// free allocated mem and quit
 	if (aggr1) free(aggr1);
@@ -1852,8 +1852,8 @@ void nlkalman_smooth_frame(float *smoo1, float *filt1, float *smoo0, float *bsic
 
 	// normalize output [[[2
 	for (int i = 0, j = 0; i < w*h; ++i)
-	for (int c = 0; c < ch ; ++c, ++j)
-		smoo1[j] /= aggr1[i];
+		if (aggr1[i] > 1e-6) for (int c = 0; c < ch; ++c, ++j) smoo1[j]/= aggr1[i];
+		else                 for (int c = 0; c < ch; ++c, ++j) smoo1[j] = filt1[j];
 
 	// free allocated mem and quit
 	dct_threads_destroy(dcts);

@@ -74,14 +74,14 @@ do
 			if [ ! -f $FLW ]; then
 				$TVL1 $NSY $F20 $FLW 0 0.25 0.2 $DW 100 $FSCALE 0.5 5 0.01 0;
 			fi
-		
+
 			# backward occlusion masks {{{2
 			if [ ! -f $OCC ]; then
 				plambda $FLW \
 				  "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.5 > 255 *" \
 				  -o $OCC
 			fi
-		
+
 			# run filtering {{{2
 #			echo $NLKF -i $NSY -s $LSIG $FPM -o $FLW -k $OCC \
 #				--flt10 $F10 --flt11 $F11 --flt20 $F20 --flt21 $F21
