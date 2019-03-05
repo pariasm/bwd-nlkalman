@@ -6,7 +6,8 @@ FFR=$2 # first frame
 LFR=$3 # last frame
 SIG=$4 # noise standard dev.
 OUT=$5 # output folder
-PRM=$6 # denoiser parameters
+FPM=${6:-""} # filtering parameters
+SPM=${7:-""} # smoothing parameters
 
 mkdir -p $OUT/s$SIG
 OUT=$OUT/s$SIG
@@ -36,12 +37,8 @@ do
 	fi
 done
 
-# check if forward optical flow is needed for smoothing
-SMOO=0
-if [[ $PRMS == *--s1_p* ]]; then SMOO=1; fi
-
 # run denoising script {{{1
-$DIR/nlkalman-seq.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT "$PRM"
+$DIR/nlkalman-seq.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT "$FPM" "$SPM"
 
 # filter 1 : frame-by-frame psnr {{{1
 for i in $(seq $FFR $LFR);
@@ -96,42 +93,36 @@ F2PSNR=$(plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
 echo "F2 - Total RMSE $F2RMSE" >> $OUT/measures
 echo "F2 - Total PSNR $F2PSNR" >> $OUT/measures
 
-# smoother : frame-by-frame psnr {{{1
-if [ $SMOO ]
-then
-	for i in $(seq $FFR $((LFR-1)));
-	do
-		# we remove a band of 0 pixels from each side of the frame
-		MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"smo1-%03d.tif" $i) m 0 2>/dev/null)
-		MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
-		PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
-	done
+# exit if no smoothing required
+if [[ $SPM == "no" ]]; then printf "%f %f\n" $F1MSE $F2MSE; exit 0; fi
 
-	echo "S1 - Frame RMSE " ${MM[*]} >> $OUT/measures
-	echo "S1 - Frame PSNR " ${PP[*]} >> $OUT/measures
-fi
+# smoother : frame-by-frame psnr {{{1
+for i in $(seq $FFR $((LFR-1)));
+do
+	# we remove a band of 0 pixels from each side of the frame
+	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"smo1-%03d.tif" $i) m 0 2>/dev/null)
+	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
+	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
+done
+
+echo "S1 - Frame RMSE " ${MM[*]} >> $OUT/measures
+echo "S1 - Frame PSNR " ${PP[*]} >> $OUT/measures
 
 # smoother : global psnr {{{1
-if [ $SMOO ]
-then
-	SS=0
-	n=0
-	for i in $(seq $((FFR+0)) $LFR);
-	do
-		SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
-		n=$((n+1))
-	done
+SS=0
+n=0
+for i in $(seq $((FFR+0)) $LFR);
+do
+	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
+	n=$((n+1))
+done
 
-	S1MSE=$SS
-	S1RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
-	S1PSNR=$(plambda -c "255 $S1RMSE / log10 20 *" 2>/dev/null)
-	echo "S1 - Total RMSE $S1RMSE" >> $OUT/measures
-	echo "S1 - Total PSNR $S1PSNR" >> $OUT/measures
-fi
+S1MSE=$SS
+S1RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
+S1PSNR=$(plambda -c "255 $S1RMSE / log10 20 *" 2>/dev/null)
+echo "S1 - Total RMSE $S1RMSE" >> $OUT/measures
+echo "S1 - Total PSNR $S1PSNR" >> $OUT/measures
 
-if [ $SMOO ]; then printf "%f %f %f\n" $F1MSE $F2MSE $S1MSE;
-else               printf "%f %f\n"    $F1MSE $F2MSE;
-fi
-
+printf "%f %f %f\n" $F1MSE $F2MSE $S1MSE;
 
 # vim:set foldmethod=marker:
