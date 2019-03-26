@@ -49,13 +49,17 @@ NLKF="$DIR/nlkalman-flt"
 TVL1="$DIR/tvl1flow"
 DECO="$DIR/decompose"
 RECO="$DIR/recompose"
-FSCALE=0; DW=0.80; TH=0.75
+FSCALE=1; DW=0.40; TH=0.75
 for i in $(seq $FFR $LFR);
 do
 	echo filtering frame $i
 
 	# compute pyramid
 	$DECO $(printf "$SEQ" $i) "$OUT/ms" $PYR_LVL "-"$(printf %03d.tif $i)
+	if [ $i -gt $FFR ]; then
+		$DECO "$OUT/flt1-"$(printf %03d.tif $((i-1))) "$OUT/ma" $PYR_LVL "-flt1-"$(printf %03d.tif $((i-1)))
+		$DECO "$OUT/flt2-"$(printf %03d.tif $((i-1))) "$OUT/ma" $PYR_LVL "-flt2-"$(printf %03d.tif $((i-1)))
+	fi
 
 	for ((l=PYR_LVL-1; l>=0; --l))
 	do
@@ -65,8 +69,10 @@ do
 		LSIG=$(bc <<< "scale=2; $SIG / ${PYR_DWN}^$l")
 
 		if [ $i -gt $FFR ]; then
-			F10=$(printf "$OUT/ms%d-flt1-%03d.tif" $l $((i-1)))
-			F20=$(printf "$OUT/ms%d-flt2-%03d.tif" $l $((i-1)))
+#			F10=$(printf "$OUT/ms%d-flt1-%03d.tif" $l $((i-1)))
+#			F20=$(printf "$OUT/ms%d-flt2-%03d.tif" $l $((i-1)))
+			F10=$(printf "$OUT/ma%d-flt1-%03d.tif" $l $((i-1)))
+			F20=$(printf "$OUT/ma%d-flt2-%03d.tif" $l $((i-1)))
 			FLW=$(printf "$OUT/ms%d-bflo-%03d.flo" $l $i)
 			OCC=$(printf "$OUT/ms%d-bocc-%03d.png" $l $i)
 
@@ -110,23 +116,27 @@ if [[ $SPM == "no" ]]; then exit 0; fi
 # last frame
 for l in $(seq $((PYR_LVL-1)) -1 0)
 do
-	ln -sf $(printf      "ms%d-flt2-%03d.tif"  $l $LFR) \
+	cp -sf $(printf      "ms%d-flt2-%03d.tif"  $l $LFR) \
 	       $(printf "$OUT/ms%d-smo1-%03d.tif"  $l $LFR)
-#	ln -srf $(printf "$OUT/ms%d-flt2-%03d.tif"  $l $LFR) \
+#	cp -srf $(printf "$OUT/ms%d-flt2-%03d.tif"  $l $LFR) \
 #	        $(printf "$OUT/ms%d-smo1-%03d.tif"  $l $LFR)
 done
-ln -sf $(printf "flt2-%03d.tif" $LFR) $(printf "$OUT/smo1-%03d.tif" $LFR)
+cp -sf $(printf "flt2-%03d.tif" $LFR) $(printf "$OUT/smo1-%03d.tif" $LFR)
 
 NLKS="$DIR/nlkalman-smo"
+FSCALE=1; DW=0.40; TH=0.75
 for i in $(seq $((LFR-1)) -1 $FFR)
 do
 	echo smoothing frame $i
+
+#	$DECO "$OUT/smo1-"$(printf %03d.tif $((i+1))) "$OUT/ma" $PYR_LVL "-smo1-"$(printf %03d.tif $((i+1)))
 
 	for ((l=PYR_LVL-1; l>=0; --l))
 	do
 		F1=$(printf "$OUT/ms%d-flt2-%03d.tif"  $l $i)
 		S1=$(printf "$OUT/ms%d-smo1-%03d.tif"  $l $i)
 		S0=$(printf "$OUT/ms%d-smo1-%03d.tif"  $l $((i+1)))
+#		S0=$(printf "$OUT/ma%d-smo1-%03d.tif"  $l $((i+1)))
 		LSIG=$(bc <<< "scale=2; $SIG / ${PYR_DWN}^$l")
 
 		FLW=$(printf "$OUT/ms%d-fflo-%03d.flo" $l $i)

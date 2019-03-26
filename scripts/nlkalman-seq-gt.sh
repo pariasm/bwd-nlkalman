@@ -1,5 +1,5 @@
 #!/bin/bash
-# Evals vnlm using ground truth
+# Runs nlkalman-seq.sh comparing the output with the ground truth
 
 SEQ=$1 # sequence path
 FFR=$2 # first frame
@@ -40,7 +40,7 @@ done
 # run denoising script {{{1
 $DIR/nlkalman-seq.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT "$FPM" "$SPM"
 
-# filter 1 : frame-by-frame psnr {{{1
+# psnr for filter 1 {{{1
 for i in $(seq $FFR $LFR);
 do
 	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"flt1-%03d.tif" $i) m 0 2>/dev/null)
@@ -51,7 +51,7 @@ done
 echo "F1 - Frame RMSE " ${MM[*]}  > $OUT/measures
 echo "F1 - Frame PSNR " ${PP[*]} >> $OUT/measures
 
-# filter 1 : global psnr {{{1
+# global psnr
 SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
@@ -66,10 +66,9 @@ F1PSNR=$(plambda -c "255 $F1RMSE / log10 20 *" 2>/dev/null)
 echo "F1 - Total RMSE $F1RMSE" >> $OUT/measures
 echo "F1 - Total PSNR $F1PSNR" >> $OUT/measures
 
-# filter 2 : frame-by-frame psnr {{{1
+# psnr for filter 2 {{{1
 for i in $(seq $FFR $LFR);
 do
-	# we remove a band of 0 pixels from each side of the frame
 	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"flt2-%03d.tif" $i) m 0 2>/dev/null)
 	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
 	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
@@ -78,7 +77,7 @@ done
 echo "F2 - Frame RMSE " ${MM[*]} >> $OUT/measures
 echo "F2 - Frame PSNR " ${PP[*]} >> $OUT/measures
 
-# filter 2 : global psnr {{{1
+# global psnr
 SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
@@ -96,10 +95,9 @@ echo "F2 - Total PSNR $F2PSNR" >> $OUT/measures
 # exit if no smoothing required
 if [[ $SPM == "no" ]]; then printf "%f %f\n" $F1MSE $F2MSE; exit 0; fi
 
-# smoother : frame-by-frame psnr {{{1
-for i in $(seq $FFR $((LFR-1)));
+# psnr for smoother {{{1
+for i in $(seq $FFR $LFR);
 do
-	# we remove a band of 0 pixels from each side of the frame
 	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"smo1-%03d.tif" $i) m 0 2>/dev/null)
 	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
 	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
@@ -108,7 +106,7 @@ done
 echo "S1 - Frame RMSE " ${MM[*]} >> $OUT/measures
 echo "S1 - Frame PSNR " ${PP[*]} >> $OUT/measures
 
-# smoother : global psnr {{{1
+# global psnr
 SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
@@ -122,6 +120,15 @@ S1RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
 S1PSNR=$(plambda -c "255 $S1RMSE / log10 20 *" 2>/dev/null)
 echo "S1 - Total RMSE $S1RMSE" >> $OUT/measures
 echo "S1 - Total PSNR $S1PSNR" >> $OUT/measures
+
+# convert tif to png (to save space) {{{1
+for i in $(seq $FFR $LFR);
+do
+	ii=$(printf %03d $i)
+	echo "plambda $OUT/flt1-${ii}.tif x -o $OUT/flt1-${ii}.png && rm $OUT/flt1-${ii}.tif"
+	echo "plambda $OUT/flt2-${ii}.tif x -o $OUT/flt2-${ii}.png && rm $OUT/flt2-${ii}.tif"
+	echo "plambda $OUT/smo1-${ii}.tif x -o $OUT/smo1-${ii}.png && rm $OUT/smo1-${ii}.tif"
+done | parallel
 
 printf "%f %f %f\n" $F1MSE $F2MSE $S1MSE;
 

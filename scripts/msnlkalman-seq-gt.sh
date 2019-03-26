@@ -6,9 +6,9 @@ FFR=$2 # first frame
 LFR=$3 # last frame
 SIG=$4 # noise standard dev.
 OUT=$5 # output folder
-FPM=$6 # denoiser parameters
-SPM=$7 # denoiser parameters
-MPM=$8 # multiscaler parameters
+FPM=${6:-""} # filtering parameters
+SPM=${7:-""} # smoothing parameters
+MPM=${8:-""} # multiscaler parameters
 
 mkdir -p $OUT/s$SIG
 OUT=$OUT/s$SIG
@@ -92,6 +92,9 @@ F2RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
 F2PSNR=$(plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
 echo "F2 - Total RMSE $F2RMSE" >> $OUT/measures
 echo "F2 - Total PSNR $F2PSNR" >> $OUT/measures
+
+# exit if no smoothing required
+if [[ $SPM == "no" ]]; then printf "%f %f\n" $F1MSE $F2MSE; exit 0; fi
 
 # psnr for multi-scale smoother {{{1
 for i in $(seq $FFR $LFR);

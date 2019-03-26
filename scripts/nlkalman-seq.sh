@@ -40,7 +40,8 @@ $NLK -i $(printf $SEQ $i) -s $SIG $FPM \
 
 # filter rest of sequence {{{1
 TVL1="$DIR/tvl1flow"
-FSCALE=0; DW=0.80; TH=0.75
+#FSCALE=0; DW=0.80; TH=0.75
+FSCALE=1; DW=0.40; TH=0.75
 
 FLOW="$OUT/bflo-%03d.flo"
 OCCL="$OUT/bocc-%03d.png"
@@ -80,18 +81,18 @@ done
 
 # smooth sequence {{{1
 TVL1="$DIR/tvl1flow"
-FSCALE=0; DW=0.80; TH=0.75
+FSCALE=1; DW=0.40; TH=0.75
 
 # exit if no smoothing required
 if [[ $SPM == "no" ]]; then exit 0; fi
 
 NLK="$DIR/nlkalman-smo"
 FLOW="$OUT/fflo-%03d.flo"
-OCCL="$OUT/bocc-%03d.png"
+OCCL="$OUT/focc-%03d.png"
 SMO1="$OUT/smo1-%03d.tif"
 
 # last frame
-ln -srf $(printf $FLT2 $LFR) $(printf $SMO1 $LFR)
+cp $(printf $FLT2 $LFR) $(printf $SMO1 $LFR)
 
 for i in $(seq $((LFR-1)) -1 $FFR)
 do
