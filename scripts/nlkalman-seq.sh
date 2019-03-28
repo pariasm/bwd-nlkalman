@@ -8,6 +8,7 @@ SIG=$4 # noise standard dev.
 OUT=$5 # output folder
 FPM=${6:-""} # filtering parameters
 SPM=${7:-""} # smoothing parameters
+OPM=${8:-"1 0.40 0.75 1 0.40 0.75"} # optical flow parameters
 
 mkdir -p $OUT
 
@@ -31,9 +32,9 @@ FLT2="$OUT/flt2-%03d.tif"
 
 i=$FFR
 NLK="$DIR/nlkalman-flt"
-echo $NLK -i $(printf $SEQ $i) -s $SIG $FPM \
- --flt11 $(printf $FLT1 $i) \
- --flt21 $(printf $FLT2 $i)
+#echo $NLK -i $(printf $SEQ $i) -s $SIG $FPM \
+# --flt11 $(printf $FLT1 $i) \
+# --flt21 $(printf $FLT2 $i)
 $NLK -i $(printf $SEQ $i) -s $SIG $FPM \
  --flt11 $(printf $FLT1 $i) \
  --flt21 $(printf $FLT2 $i)
@@ -41,7 +42,9 @@ $NLK -i $(printf $SEQ $i) -s $SIG $FPM \
 # filter rest of sequence {{{1
 TVL1="$DIR/tvl1flow"
 #FSCALE=0; DW=0.80; TH=0.75
-FSCALE=1; DW=0.40; TH=0.75
+
+read -ra O <<< "$OPM"
+FSCALE=${O[0]}; DW=${O[1]}; TH=${O[2]}; NPROC=2
 
 FLOW="$OUT/bflo-%03d.flo"
 OCCL="$OUT/bocc-%03d.png"
@@ -56,7 +59,7 @@ do
 		$TVL1 $(printf $SEQ $i) \
 		      $(printf $FLT2 $((i-1))) \
 		      $file \
-		      0 0.25 0.2 $DW 100 $FSCALE 0.5 5 0.01 0;
+		      $NPROC 0.25 0.2 $DW 100 $FSCALE 0.5 5 0.01 0;
 	fi
 
 	# backward occlusion masks {{{2
@@ -68,10 +71,10 @@ do
 	fi
 
 	# run filtering {{{2
-	echo $NLK -i $(printf $SEQ $i) -s $SIG $FPM \
-	 -o $(printf $FLOW $i) -k $(printf $OCCL $i)\
-	 --flt10 $(printf $FLT1 $((i-1))) --flt11 $(printf $FLT1 $i) \
-	 --flt20 $(printf $FLT2 $((i-1))) --flt21 $(printf $FLT2 $i)
+#	echo $NLK -i $(printf $SEQ $i) -s $SIG $FPM \
+#	 -o $(printf $FLOW $i) -k $(printf $OCCL $i)\
+#	 --flt10 $(printf $FLT1 $((i-1))) --flt11 $(printf $FLT1 $i) \
+#	 --flt20 $(printf $FLT2 $((i-1))) --flt21 $(printf $FLT2 $i)
 	$NLK -i $(printf $SEQ $i) -s $SIG $FPM \
 	 -o $(printf $FLOW $i) -k $(printf $OCCL $i)\
 	 --flt10 $(printf $FLT1 $((i-1))) --flt11 $(printf $FLT1 $i) \
@@ -81,7 +84,8 @@ done
 
 # smooth sequence {{{1
 TVL1="$DIR/tvl1flow"
-FSCALE=1; DW=0.40; TH=0.75
+#FSCALE=1; DW=0.40; TH=0.75
+FSCALE=${O[3]}; DW=${O[4]}; TH=${O[5]}; NPROC=2
 
 # exit if no smoothing required
 if [[ $SPM == "no" ]]; then exit 0; fi
@@ -103,7 +107,7 @@ do
 		$TVL1 $(printf $FLT2 $i) \
 		      $(printf $SMO1 $((i+1))) \
 		      $file \
-		      0 0.25 0.2 $DW 100 $FSCALE 0.5 5 0.01 0;
+		      $NPROC 0.25 0.2 $DW 100 $FSCALE 0.5 5 0.01 0;
 	fi
 
 	# backward occlusion masks {{{2
@@ -115,9 +119,9 @@ do
 	fi
 
 	# run smoothing {{{2
-	echo $NLK --flt1 $(printf $FLT2 $i) --smo0 $(printf $SMO1 $((i+1))) \
-	 -s $SIG $SPM -o $(printf $FLOW $i) -k $(printf $OCCL $i)\
-	 --smo1 $(printf $SMO1 $i)
+#	echo $NLK --flt1 $(printf $FLT2 $i) --smo0 $(printf $SMO1 $((i+1))) \
+#	 -s $SIG $SPM -o $(printf $FLOW $i) -k $(printf $OCCL $i)\
+#	 --smo1 $(printf $SMO1 $i)
 	$NLK --flt1 $(printf $FLT2 $i) --smo0 $(printf $SMO1 $((i+1))) \
 	 -s $SIG $SPM -o $(printf $FLOW $i) -k $(printf $OCCL $i)\
 	 --smo1 $(printf $SMO1 $i)

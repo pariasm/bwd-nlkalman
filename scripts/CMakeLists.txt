@@ -14,3 +14,4 @@ configure_file(train-nn-smoothing.sh       ${CMAKE_BINARY_DIR}/bin/train-nn-smoo
 configure_file(line-search-smoothing.sh    ${CMAKE_BINARY_DIR}/bin/line-search-smoothing.sh    COPYONLY)
 configure_file(nlkalman-smoothing-gt.sh    ${CMAKE_BINARY_DIR}/bin/nlkalman-smoothing-gt.sh    COPYONLY)
 configure_file(nlkalman-smoothing-train.sh ${CMAKE_BINARY_DIR}/bin/nlkalman-smoothing-train.sh COPYONLY)
+configure_file(train-gd-smoothing-oflow.sh ${CMAKE_BINARY_DIR}/bin/train-gd-smoothing-oflow.sh COPYONLY)
