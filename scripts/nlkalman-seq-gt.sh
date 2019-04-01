@@ -10,8 +10,8 @@ FPM=${6:-""} # filtering parameters
 SPM=${7:-""} # smoothing parameters
 OPM=${8:-"1 0.40 0.75 1 0.40 0.75"} # optical flow parameters
 
-mkdir -p $OUT/s$SIG
-OUT=$OUT/s$SIG
+mkdir -p $OUT/
+OUT=$OUT/
 
 # we assume that the binaries are in the same folder as the script
 DIR=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
@@ -42,7 +42,7 @@ done
 $DIR/nlkalman-seq.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT "$FPM" "$SPM" "$OPM"
 
 # reset first frame for psnr computation {{{1
-FFR=$((FFR+10))
+FFR=$((FFR+0))
 
 # psnr for filter 1 {{{1
 SS=0
@@ -87,7 +87,19 @@ echo "F2 - Total PSNR $F2PSNR"   >> $OUT/measures
 # psnr for smoother {{{1
 
 # exit if no smoothing required
-if [[ $SPM == "no" ]]; then printf "%f %f\n" $F1MSE $F2MSE; exit 0; fi
+if [[ $SPM == "no" ]];
+then 
+	# convert tif to png (to save space) {{{1
+	for i in $(seq $FFR $LFR);
+	do
+		ii=$(printf %03d $i)
+		echo "plambda $OUT/flt1-${ii}.tif x -o $OUT/flt1-${ii}.png && rm $OUT/flt1-${ii}.tif"
+		echo "plambda $OUT/flt2-${ii}.tif x -o $OUT/flt2-${ii}.png && rm $OUT/flt2-${ii}.tif"
+	done | parallel
+
+	printf "%f %f\n" $F1MSE $F2MSE;
+	exit 0;
+fi
 
 SS=0
 n=0
@@ -108,14 +120,14 @@ echo "S1 - Frame PSNR " ${PP[*]} >> $OUT/measures
 echo "S1 - Total RMSE $S1RMSE" >> $OUT/measures
 echo "S1 - Total PSNR $S1PSNR" >> $OUT/measures
 
-## convert tif to png (to save space) {{{1
-#for i in $(seq $FFR $LFR);
-#do
-#	ii=$(printf %03d $i)
-#	echo "plambda $OUT/flt1-${ii}.tif x -o $OUT/flt1-${ii}.png && rm $OUT/flt1-${ii}.tif"
-#	echo "plambda $OUT/flt2-${ii}.tif x -o $OUT/flt2-${ii}.png && rm $OUT/flt2-${ii}.tif"
-#	echo "plambda $OUT/smo1-${ii}.tif x -o $OUT/smo1-${ii}.png && rm $OUT/smo1-${ii}.tif"
-#done | parallel
+# convert tif to png (to save space) {{{1
+for i in $(seq $FFR $LFR);
+do
+	ii=$(printf %03d $i)
+	echo "plambda $OUT/flt1-${ii}.tif x -o $OUT/flt1-${ii}.png && rm $OUT/flt1-${ii}.tif"
+	echo "plambda $OUT/flt2-${ii}.tif x -o $OUT/flt2-${ii}.png && rm $OUT/flt2-${ii}.tif"
+	echo "plambda $OUT/smo1-${ii}.tif x -o $OUT/smo1-${ii}.png && rm $OUT/smo1-${ii}.tif"
+done | parallel
 
 printf "%f %f %f\n" $F1MSE $F2MSE $S1MSE;
 
