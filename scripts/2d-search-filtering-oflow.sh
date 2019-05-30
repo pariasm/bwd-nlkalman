@@ -36,20 +36,20 @@ BIN=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 # initial parameters
 
 # sigma 10
-f_sc=1
-f_dw=0.4
-f_th=0.75
-s_sc=1
-s_dw=0.4
-s_th=0.75
+f1_sc=1
+f1_dw=0.4
+f1_th=0.5
+f2_sc=1
+f2_dw=0.4
+f2_th=0.5
 
 # function to run the algorithm
 function nlk {
 
-	f_dw="$1"
-	f_th="$2"
-	s_dw="$3"
-	s_th="$4"
+	f1_dw="$1"
+	f1_th="$2"
+	f2_dw="$3"
+	f2_th="$4"
 
 	folder="$output/tmp/"
 	mkdir -p $folder
@@ -80,19 +80,22 @@ function nlk {
 }
 
 # linear search
-for f_dw in $(seq 0.05 0.05 1)
+for f1_dw in $(seq 0.1 0.1 1.0)
 do
-	echo $f_dw
+	for f2_dw in $(seq 0.1 0.1 1.0)
+	do
+		echo $f1_dw $f2_dw
 
-	# performance of current point
-	out=$(nlk $f_dw $f_th $s_dw $s_th)
-	read -ra mse <<< "$out"
-	f1_mse=${mse[0]}
-	f2_mse=${mse[1]}
-#	s1_mse=${mse[2]}
+		# performance of current point
+		out=$(nlk $f1_dw $f2_th $f2_dw $f2_th)
+		read -ra mse <<< "$out"
+		f1_mse=${mse[0]}
+		f2_mse=${mse[1]}
+	#	s1_mse=${mse[2]}
 
-	printf "%02d %d %08.5f %08.5f %d %08.5f %08.5f %9.6f %9.6f %9.6f\n" \
-		$s $f_sc $f_dw $f_th $s_sc $s_dw $s_th \
-		$f1_mse $f2_mse $s1_mse >> $output/table
+		printf "%02d %d %08.5f %08.5f %d %08.5f %08.5f %9.6f %9.6f %9.6f\n" \
+			$s $f1_sc $f1_dw $f1_th $f2_sc $f2_dw $f2_th \
+			$f1_mse $f2_mse $s1_mse >> $output/table
+	done
 done
 

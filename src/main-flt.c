@@ -20,7 +20,7 @@ static const char *const usages[] = {
 // frame-by-frame filtering main
 int main(int argc, const char *argv[])
 {
-	omp_set_num_threads(2);
+//	omp_set_num_threads(2);
 	// parse command line [[[2
 
 	// command line parameters and their defaults
@@ -76,7 +76,7 @@ int main(int argc, const char *argv[])
 		OPT_STRING ('k', "bocc" , &boccl_path, "input bwd occlusion masks path"),
 		OPT_STRING ( 0 , "flt10", &flt10_path, "input previous first filtering path"),
 		OPT_STRING ( 0 , "flt20", &flt20_path, "input previous second filtering path"),
-		OPT_STRING ( 0 , "flt11", &flt11_path, "output first filtering path"),
+		OPT_STRING ( 0 , "flt11", &flt11_path, "input/output first filtering path"),
 		OPT_STRING ( 0 , "flt21", &flt21_path, "output second filtering path"),
 		OPT_FLOAT  ('s', "sigma", &sigma, "noise standard dev"),
 
@@ -126,13 +126,17 @@ int main(int argc, const char *argv[])
 	verbose = (bool)verbose_int;
 
 	// determine mode
-	bool second_filt = (f2_prms.patch_sz && flt21_path);
+	bool apply_filt1 = (f1_prms.patch_sz);
+	bool apply_filt2 = (f2_prms.patch_sz && flt21_path);
 
 	// check if output paths have been provided
-	if ((f1_prms.patch_sz == 0))
-		return fprintf(stderr, "Error: f1_p == 0, exiting\n"), 1;
+	if (!apply_filt1 && !apply_filt2)
+		return fprintf(stderr, "Error: nothing to do, exiting\n"), 1;
 
-	if (!flt11_path && !(flt21_path && f2_prms.patch_sz))
+	if (!apply_filt1 && !flt11_path)
+		return fprintf(stderr, "Error: f1_p == 0 and no input path given, exiting\n"), 1;
+
+	if (!flt11_path && !apply_filt2)
 		return fprintf(stderr, "Error: no output path given for any "
 		                       "computed output - exiting\n"), 1;
 
@@ -156,32 +160,38 @@ int main(int argc, const char *argv[])
 		printf("\tnoisy frames  %s\n", noisy_path);
 		printf("\tbwd flows     %s\n", bflow_path);
 		printf("\tbwd occlus.   %s\n", boccl_path);
-		printf("\tfiltering 1   %s\n", flt10_path);
-		printf("\tfiltering 2   %s\n", flt20_path);
+		printf("\tprev filt 1   %s\n", flt10_path);
+		printf("\tprev filt 2   %s\n", flt20_path);
+		if (!apply_filt1)
+			printf("\tfiltering 1   %s\n", flt11_path);
 		printf("\n");
 
 		printf("data output:\n");
-		printf("\tfiltering 1   %s\n", flt11_path);
+		if (apply_filt1)
+			printf("\tfiltering 1   %s\n", flt11_path);
 		printf("\tfiltering 2   %s\n", flt21_path);
 		printf("\n");
 
-		printf("first filtering parameters:\n");
-		printf("\tpatch      %d\n", f1_prms.patch_sz);
-		printf("\tsearch_x   %d\n", f1_prms.search_sz_x);
-		printf("\tsearch_t   %d\n", f1_prms.search_sz_t);
+		if (apply_filt1)
+		{
+			printf("first filtering parameters:\n");
+			printf("\tpatch      %d\n", f1_prms.patch_sz);
+			printf("\tsearch_x   %d\n", f1_prms.search_sz_x);
+			printf("\tsearch_t   %d\n", f1_prms.search_sz_t);
 #ifndef K_SIMILAR_PATCHES
-		printf("\tdth        %g\n", f1_prms.dista_th);
+			printf("\tdth        %g\n", f1_prms.dista_th);
 #else
-		printf("\tnp_x       %d\n", f1_prms.npatches_x);
-		printf("\tnp_t       %d\n", f1_prms.npatches_t);
-		printf("\tnp_tagg    %d\n", f1_prms.npatches_tagg);
+			printf("\tnp_x       %d\n", f1_prms.npatches_x);
+			printf("\tnp_t       %d\n", f1_prms.npatches_t);
+			printf("\tnp_tagg    %d\n", f1_prms.npatches_tagg);
 #endif
-		printf("\tlambda     %g\n", f1_prms.dista_lambda);
-		printf("\tbeta_x     %g\n", f1_prms.beta_x);
-		printf("\tbeta_t     %g\n", f1_prms.beta_t);
-		printf("\n");
+			printf("\tlambda     %g\n", f1_prms.dista_lambda);
+			printf("\tbeta_x     %g\n", f1_prms.beta_x);
+			printf("\tbeta_t     %g\n", f1_prms.beta_t);
+			printf("\n");
+		}
 
-		if (second_filt)
+		if (apply_filt2)
 		{
 			printf("second filtering parameters:\n");
 			printf("\tpatch      %d\n", f2_prms.patch_sz);
@@ -205,8 +215,7 @@ int main(int argc, const char *argv[])
 	int w, h, c;
 	float *nisy = iio_read_image_float_vec(noisy_path, &w, &h, &c);
 	if (!nisy)
-		return fprintf(stderr, "Error while openning noisy frame\n"),
-		       EXIT_FAILURE;
+		return fprintf(stderr, "Error while openning bwd optical flow\n"), 1;
 
 	// load backward optical flow [[[3
 	float * bflo = NULL;
@@ -218,16 +227,14 @@ int main(int argc, const char *argv[])
 		if (!bflo)
 		{
 			if (nisy) free(nisy);
-			fprintf(stderr, "Error while openning bwd optical flow\n");
-			return EXIT_FAILURE;
+			return fprintf(stderr, "Error while openning bwd optical flow\n"), 1;
 		}
 
 		if (w*h != w1*h1 || c1 != 2)
 		{
-			fprintf(stderr, "Frame and optical flow size missmatch\n");
 			if (nisy) free(nisy);
 			if (bflo) free(bflo);
-			return EXIT_FAILURE;
+			return fprintf(stderr, "Frame and optical flow size missmatch\n"), 1;
 		}
 	}
 
@@ -242,17 +249,15 @@ int main(int argc, const char *argv[])
 		{
 			if (nisy) free(nisy);
 			if (bflo) free(bflo);
-			fprintf(stderr, "Error while openning occlusion mask\n");
-			return EXIT_FAILURE;
+			return fprintf(stderr, "Error while openning occlusion mask\n"), 1;
 		}
 
 		if (w*h != w1*h1 || c1 != 1)
 		{
-			fprintf(stderr, "Frame and occlusion mask size missmatch\n");
 			if (nisy) free(nisy);
 			if (bflo) free(bflo);
 			if (bocc) free(bocc);
-			return EXIT_FAILURE;
+			return fprintf(stderr, "Frame and occlusion mask size missmatch\n"), 1;
 		}
 	}
 
@@ -264,22 +269,15 @@ int main(int argc, const char *argv[])
 		flt10 = iio_read_image_float_vec(flt10_path, &w1, &h1, &c1);
 
 		if (!flt10)
-		{
-//			if (nisy) free(nisy);
-//			if (bflo) free(bflo);
-//			if (bocc) free(bocc);
 			fprintf(stderr, "Error while openning previous filter 1 output\n");
-//			return EXIT_FAILURE;
-		}
 
 		if (flt10 && w*h*c != w1*h1*c1)
 		{
-			fprintf(stderr, "Frame and previous filter 1 output size missmatch\n");
 			if (nisy) free(nisy);
 			if (bflo) free(bflo);
 			if (bocc) free(bocc);
 			if (flt10) free(flt10);
-			return EXIT_FAILURE;
+			return fprintf(stderr, "Frame and previous filter 1 output size missmatch\n"), 1;
 		}
 	}
 
@@ -291,31 +289,52 @@ int main(int argc, const char *argv[])
 		flt20 = iio_read_image_float_vec(flt20_path, &w1, &h1, &c1);
 
 		if (!flt20)
-		{
-//			if (nisy) free(nisy);
-//			if (bflo) free(bflo);
-//			if (bocc) free(bocc);
-//			if (flt10) free(flt10);
 			fprintf(stderr, "Error while openning previous filter 2 output\n");
-//			return EXIT_FAILURE;
-		}
 
 		if (flt20 && w*h*c != w1*h1*c1)
 		{
-			fprintf(stderr, "Frame and previous filter 2 output size missmatch\n");
 			if (nisy) free(nisy);
 			if (bflo) free(bflo);
 			if (bocc) free(bocc);
 			if (flt10) free(flt10);
 			if (flt20) free(flt20);
-			return EXIT_FAILURE;
+			return fprintf(stderr, "Frame and previous filter 2 output size missmatch\n"), 1;
 		}
 	}
+
+	// load filter 1 output from current frame [[[3
+	float * flt11 = NULL;
+	if (!apply_filt1)
+	{
+		int w1, h1, c1;
+		flt11 = iio_read_image_float_vec(flt11_path, &w1, &h1, &c1);
+
+		if (!flt11)
+		{
+			if (nisy) free(nisy);
+			if (bflo) free(bflo);
+			if (bocc) free(bocc);
+			if (flt10) free(flt10);
+			if (flt20) free(flt20);
+			return fprintf(stderr, "Error while openning filter 1 output\n"), 1;
+		}
+
+		if (flt11 && w*h*c != w1*h1*c1)
+		{
+			if (nisy) free(nisy);
+			if (bflo) free(bflo);
+			if (bocc) free(bocc);
+			if (flt10) free(flt10);
+			if (flt20) free(flt20);
+			if (flt11) free(flt11);
+			return fprintf(stderr, "Frame and filter 1 output size missmatch\n"), 1;
+		}
+	}
+
 
 	// run denoiser - forward pass [[[2
 	const int whc = w*h*c, wh2 = w*h*2;
 	float * warp0 = malloc(whc*sizeof(float));
-	float * flt11 = malloc(whc*sizeof(float));
 
 	// change color space
 	rgb2opp(nisy, w, h, c);
@@ -323,20 +342,24 @@ int main(int argc, const char *argv[])
 	if (flt20) rgb2opp(flt20, w, h, c);
 
 	// 1st filtering step [[[3
-
-	// warp previous denoised frame
-	if (flt10 && bflo)
+	if (apply_filt1)
 	{
-		warp_bicubic(warp0, flt10, bflo, bocc, w, h, c);
-		float *tmp = flt10; flt10 = warp0; warp0 = tmp; // swap warp0-filt10
-	}
+		// warp previous denoised frame
+		if (flt10 && bflo)
+		{
+			warp_bicubic(warp0, flt10, bflo, bocc, w, h, c);
+			float *tmp = flt10; flt10 = warp0; warp0 = tmp; // swap warp0-filt10
+		}
 
-	// filter
-	nlkalman_filter_frame(flt11, nisy, flt10, NULL, w, h, c, sigma, f1_prms, 0);
+		// filter
+		flt11 = malloc(whc*sizeof(float));
+		nlkalman_filter_frame(flt11, nisy, flt10, NULL, w, h, c, sigma, f1_prms, 0);
+	}
+	else rgb2opp(flt11, w, h, c);
 
 	// 2nd filtering step [[[3
-	float * flt21;
-	if (second_filt)
+	float * flt21 = NULL;
+	if (apply_filt2)
 	{
 		// warp previous denoised frame
 		if (bflo && flt20)
@@ -358,7 +381,7 @@ int main(int argc, const char *argv[])
 	}
 
 	// save first filtering output
-	if (flt11_path)
+	if (apply_filt1 && flt11_path)
 	{
 		opp2rgb(flt11, w, h, c);
 		iio_save_image_float_vec(flt11_path, flt11, w, h, c);

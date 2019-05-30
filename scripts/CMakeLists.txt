@@ -16,3 +16,4 @@ configure_file(nlkalman-smoothing-gt.sh    ${CMAKE_BINARY_DIR}/bin/nlkalman-smoo
 configure_file(nlkalman-smoothing-train.sh ${CMAKE_BINARY_DIR}/bin/nlkalman-smoothing-train.sh COPYONLY)
 configure_file(train-gd-smoothing-oflow.sh ${CMAKE_BINARY_DIR}/bin/train-gd-smoothing-oflow.sh COPYONLY)
 configure_file(line-search-filtering-oflow.sh ${CMAKE_BINARY_DIR}/bin/line-search-filtering-oflow.sh COPYONLY)
+configure_file(2d-search-filtering-oflow.sh ${CMAKE_BINARY_DIR}/bin/2d-search-filtering-oflow.sh COPYONLY)
