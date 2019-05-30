@@ -29,9 +29,10 @@ find_library (FFTWF_LIBRARIES NAMES fftw3f)
 
 # add project directories #####################################################
 
-add_subdirectory(lib/iio)      # image i/o
-add_subdirectory(lib/tvl1flow) # tvl1 optical flow
-add_subdirectory(lib/argparse) # command line parsing
+add_subdirectory(lib/iio)        # image i/o
+add_subdirectory(lib/tvl1flow)   # tvl1 optical flow
+add_subdirectory(lib/argparse)   # command line parsing
+add_subdirectory(lib/multiscale) # multiscaler
 add_subdirectory(src)
 add_subdirectory(scripts)
 
@@ -45,6 +46,7 @@ set(CPACK_SOURCE_IGNORE_FILES
 "\\\\.*\\\\.swp"
 "\\\\*\\\\.o"
 "^${PROJECT_SOURCE_DIR}/build/"
+"^${PROJECT_SOURCE_DIR}/results/"
 "git")
 
 set(CPACK_SOURCE_PACKAGE_FILE_NAME
