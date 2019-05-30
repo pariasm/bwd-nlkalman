@@ -75,7 +75,7 @@ int main(int argc, const char *argv[])
 		OPT_STRING ('o', "bflo" , &bflow_path, "input bwd flow path"),
 		OPT_STRING ('k', "bocc" , &boccl_path, "input bwd occlusion masks path"),
 		OPT_STRING ( 0 , "flt10", &flt10_path, "input previous first filtering path"),
-		OPT_STRING ( 0 , "flt20", &flt20_path, "intut previous second filtering path"),
+		OPT_STRING ( 0 , "flt20", &flt20_path, "input previous second filtering path"),
 		OPT_STRING ( 0 , "flt11", &flt11_path, "output first filtering path"),
 		OPT_STRING ( 0 , "flt21", &flt21_path, "output second filtering path"),
 		OPT_FLOAT  ('s', "sigma", &sigma, "noise standard dev"),
@@ -205,7 +205,7 @@ int main(int argc, const char *argv[])
 	int w, h, c;
 	float *nisy = iio_read_image_float_vec(noisy_path, &w, &h, &c);
 	if (!nisy)
-		return fprintf(stderr, "Error while openning bwd optical flow\n"),
+		return fprintf(stderr, "Error while openning noisy frame\n"),
 		       EXIT_FAILURE;
 
 	// load backward optical flow [[[3
