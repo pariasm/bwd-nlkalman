@@ -20,7 +20,7 @@ static const char *const usages[] = {
 // frame-by-frame filtering main
 int main(int argc, const char *argv[])
 {
-	omp_set_num_threads(2);
+//	omp_set_num_threads(2);
 	// parse command line [[[2
 
 	// command line parameters and their defaults

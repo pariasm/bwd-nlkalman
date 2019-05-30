@@ -84,23 +84,22 @@ echo "F2 - Frame PSNR " ${PP[*]} >> $OUT/measures
 echo "F2 - Total RMSE $F2RMSE"   >> $OUT/measures
 echo "F2 - Total PSNR $F2PSNR"   >> $OUT/measures
 
-# psnr for smoother {{{1
-
-# exit if no smoothing required
+# exit if no smoothing required {{{2
 if [[ $SPM == "no" ]];
 then 
-	# convert tif to png (to save space) {{{1
+	# convert tif to png (to save space)
 	for i in $(seq $FFR $LFR);
 	do
 		ii=$(printf %03d $i)
-		echo "plambda $OUT/flt1-${ii}.tif x -o $OUT/flt1-${ii}.png && rm $OUT/flt1-${ii}.tif"
-		echo "plambda $OUT/flt2-${ii}.tif x -o $OUT/flt2-${ii}.png && rm $OUT/flt2-${ii}.tif"
+		echo "iion $OUT/flt1-${ii}.tif $OUT/flt1-${ii}.png && rm $OUT/flt1-${ii}.tif"
+		echo "iion $OUT/flt2-${ii}.tif $OUT/flt2-${ii}.png && rm $OUT/flt2-${ii}.tif"
 	done | parallel
 
 	printf "%f %f\n" $F1MSE $F2MSE;
 	exit 0;
 fi
 
+# psnr for smoother {{{1
 SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
@@ -120,13 +119,13 @@ echo "S1 - Frame PSNR " ${PP[*]} >> $OUT/measures
 echo "S1 - Total RMSE $S1RMSE" >> $OUT/measures
 echo "S1 - Total PSNR $S1PSNR" >> $OUT/measures
 
-# convert tif to png (to save space) {{{1
+# convert tif to png (to save space) {{{2
 for i in $(seq $FFR $LFR);
 do
 	ii=$(printf %03d $i)
-	echo "plambda $OUT/flt1-${ii}.tif x -o $OUT/flt1-${ii}.png && rm $OUT/flt1-${ii}.tif"
-	echo "plambda $OUT/flt2-${ii}.tif x -o $OUT/flt2-${ii}.png && rm $OUT/flt2-${ii}.tif"
-	echo "plambda $OUT/smo1-${ii}.tif x -o $OUT/smo1-${ii}.png && rm $OUT/smo1-${ii}.tif"
+	echo "iion $OUT/flt1-${ii}.tif $OUT/flt1-${ii}.png && rm $OUT/flt1-${ii}.tif"
+	echo "iion $OUT/flt2-${ii}.tif $OUT/flt2-${ii}.png && rm $OUT/flt2-${ii}.tif"
+	echo "iion $OUT/smo1-${ii}.tif $OUT/smo1-${ii}.png && rm $OUT/smo1-${ii}.tif"
 done | parallel
 
 printf "%f %f %f\n" $F1MSE $F2MSE $S1MSE;
