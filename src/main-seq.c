@@ -56,7 +56,7 @@ float * vio_read_video_float_vec(const char * const path, int first, int last,
 	return vid;
 }
 
-void vio_save_video_float_vec(const char * const path, float * vid,
+void vio_write_video_float_vec(const char * const path, float * vid,
 		int first, int last, int w, int h, int c)
 {
 	const int whc = w*h*c;
@@ -65,7 +65,7 @@ void vio_save_video_float_vec(const char * const path, float * vid,
 		char frame_name[512];
 		sprintf(frame_name, path, f);
 		float * im = vid + (f - first)*whc;
-		iio_save_image_float_vec(frame_name, im, w, h, c);
+		iio_write_image_float_vec(frame_name, im, w, h, c);
 	}
 }
 
@@ -477,7 +477,7 @@ int main(int argc, const char *argv[])
 		{
 			sprintf(frame_name, flt1_path, f);
 			opp2rgb(bsic1, w, h, c);
-			iio_save_image_float_vec(frame_name, bsic1, w, h, c);
+			iio_write_image_float_vec(frame_name, bsic1, w, h, c);
 			rgb2opp(bsic1, w, h, c);
 		}
 
@@ -508,7 +508,7 @@ int main(int argc, const char *argv[])
 		{
 			sprintf(frame_name, flt2_path, f);
 			opp2rgb(nisy1, w, h, c);
-			iio_save_image_float_vec(frame_name, nisy1, w, h, c);
+			iio_write_image_float_vec(frame_name, nisy1, w, h, c);
 			rgb2opp(nisy1, w, h, c);
 		}
 
@@ -544,7 +544,7 @@ int main(int argc, const char *argv[])
 		{
 			sprintf(frame_name, smo1_path, f-1);
 			opp2rgb(deno1, w, h, c);
-			iio_save_image_float_vec(frame_name, deno1, w, h, c);
+			iio_write_image_float_vec(frame_name, deno1, w, h, c);
 //			rgb2opp(deno1, w, h, c);
 		}
 	}
@@ -579,7 +579,7 @@ int main(int argc, const char *argv[])
 		// save output
 		sprintf(frame_name, smo1_path, f);
 		opp2rgb(deno1, w, h, c);
-		iio_save_image_float_vec(frame_name, deno1, w, h, c);
+		iio_write_image_float_vec(frame_name, deno1, w, h, c);
 		rgb2opp(deno1, w, h, c);
 	}
 

@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
 		);
 
 		//save the optical flow
-		iio_save_image_float_split(outfile, u, nx, ny, 2);
+		iio_write_image_float_split(outfile, u, nx, ny, 2);
 
 		//delete allocated memory
 		free(I0);

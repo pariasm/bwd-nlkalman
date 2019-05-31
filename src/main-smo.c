@@ -210,7 +210,7 @@ int main(int argc, const char *argv[])
 
 	// save first filtering output
 	opp2rgb(smo1, w, h, c);
-	iio_save_image_float_vec(smo1_path, smo1, w, h, c);
+	iio_write_image_float_vec(smo1_path, smo1, w, h, c);
 
 	if (wrp0) free(wrp0);
 	if (smo1) free(smo1);

@@ -376,7 +376,7 @@ int main(int argc, const char *argv[])
 		if (flt11_path)
 		{
 			opp2rgb(flt21, w, h, c);
-			iio_save_image_float_vec(flt21_path, flt21, w, h, c);
+			iio_write_image_float_vec(flt21_path, flt21, w, h, c);
 		}
 	}
 
@@ -384,7 +384,7 @@ int main(int argc, const char *argv[])
 	if (apply_filt1 && flt11_path)
 	{
 		opp2rgb(flt11, w, h, c);
-		iio_save_image_float_vec(flt11_path, flt11, w, h, c);
+		iio_write_image_float_vec(flt11_path, flt11, w, h, c);
 	}
 
 	if (flt21) free(flt21);
