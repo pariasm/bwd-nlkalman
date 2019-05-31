@@ -1,0 +1,16 @@
+CODE
+====
+
+Pablo Arias (bwd-nlkalman video denoising)
+
+CODE INCLUDED IN lib
+====================
+
+Enric Meinhardt-Llopis (image i/o and imscript-lite)
+Javier Sánchez (TVL1 optical flow)
+Yecheng Fu (argparse command line parsing)
+Nicola Pierazzo & Gabriele Facciolo (multiscaler)
+
+
+If I have forgotten someone, please let me know.
+--pablo

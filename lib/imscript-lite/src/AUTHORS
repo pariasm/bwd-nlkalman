@@ -1,0 +1,34 @@
+CODE CONTRIBUTORS
+
+Enric Meinhardt-Llopis (initial coding)
+Gabriele Facciolo (many patches, ideas, features)
+Carlo de Franchis (patches, features)
+Nicolas Limare (first makefile)
+Nicola Pierazzo (patches)
+Thibaud Briand (patches)
+Rafael Grompone von Gioi (nfa algorithms)
+David Youssefi (patches)
+Mariano Rodríguez (bash completion)
+
+
+
+ACKNOWLEDGEMENTS (testing, corrections and bug reports)
+
+Roberto Pablo Pérez Palomares
+Martin Etchart
+Juan Cardelino
+Jérémy Anger
+
+
+CODE STOLEN FROM:
+
+Daniel Atkinson (linear algebra, ccmath)
+Lionel Moisan, Pascal Monasse (fundamental matrices, splines)
+Javier Sánchez (optical flow)
+David Tschumperlé (X11 interfacing)
+Linas Vepstas (vvector.h)
+
+
+
+NOTE: If I have forgotten some names, this is an involuntary error.
+Please tell me as soon as possible and I will add the missing names. --enric
