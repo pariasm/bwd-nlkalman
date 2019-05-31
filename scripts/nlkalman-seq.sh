@@ -66,7 +66,7 @@ do
 	# backward occlusion masks {{{2
 	O=$(printf $OCCL 1 $i)
 	if [ ! -f $O ]; then
-		plambda $F \
+		$DIR/plambda $F \
 		  "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs $TH1 > 255 *" \
 		  -o $O
 	fi
@@ -91,7 +91,7 @@ do
 #	# update occlusion masks {{{2
 #	O=$(printf $OCCL 2 $i)
 #	if [ ! -f $O ]; then
-#		plambda $F \
+#		$DIR/plambda $F \
 #		  "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs $TH2 > 255 *" \
 #		  -o $O
 #	fi
@@ -134,7 +134,7 @@ do
 	# backward occlusion masks {{{2
 	file=$(printf $OCCL $i)
 	if [ ! -f $file ]; then
-		plambda $(printf $FLOW $i) \
+		$DIR/plambda $(printf $FLOW $i) \
 		  "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.5 > 255 *" \
 		  -o $file
 	fi

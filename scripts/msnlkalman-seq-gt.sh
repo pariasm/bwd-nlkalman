@@ -34,7 +34,7 @@ do
 	if [ ! -f $file ]
 	then
 		export SRAND=$RANDOM;
-		awgn $SIG $(printf $SEQ $i) $file
+		$DIR/awgn $SIG $(printf $SEQ $i) $file
 	fi
 done
 
@@ -44,9 +44,9 @@ $DIR/msnlkalman-seq.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT "$FPM" "$SPM" $MPM
 # psnr for multi-scale filter 1 {{{1
 for i in $(seq $FFR $LFR);
 do
-	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"flt1-%03d.tif" $i) m 0 2>/dev/null)
-	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
-	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
+	MM[$i]=$($DIR/psnr.sh $(printf $SEQ $i) $(printf $OUT/"flt1-%03d.tif" $i) m 0 2>/dev/null)
+	MM[$i]=$($DIR/plambda -c "${MM[$i]} sqrt" 2>/dev/null)
+	PP[$i]=$($DIR/plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
 done
 
 echo "F1 - Frame RMSE " ${MM[*]}  > $OUT/measures
@@ -57,22 +57,22 @@ SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
 do
-	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
+	SS=$($DIR/plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
 	n=$((n+1))
 done
 
 F1MSE=$SS
-F1RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
-F1PSNR=$(plambda -c "255 $F1RMSE / log10 20 *" 2>/dev/null)
+F1RMSE=$($DIR/plambda -c "$SS sqrt" 2>/dev/null)
+F1PSNR=$($DIR/plambda -c "255 $F1RMSE / log10 20 *" 2>/dev/null)
 echo "F1 - Total RMSE $F1RMSE" >> $OUT/measures
 echo "F1 - Total PSNR $F1PSNR" >> $OUT/measures
 
 # psnr for multi-scale filter 2 {{{1
 for i in $(seq $FFR $LFR);
 do
-	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"flt2-%03d.tif" $i) m 0 2>/dev/null)
-	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
-	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
+	MM[$i]=$($DIR/psnr.sh $(printf $SEQ $i) $(printf $OUT/"flt2-%03d.tif" $i) m 0 2>/dev/null)
+	MM[$i]=$($DIR/plambda -c "${MM[$i]} sqrt" 2>/dev/null)
+	PP[$i]=$($DIR/plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
 done
 
 echo "F2 - Frame RMSE " ${MM[*]} >> $OUT/measures
@@ -83,13 +83,13 @@ SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
 do
-	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
+	SS=$($DIR/plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
 	n=$((n+1))
 done
 
 F2MSE=$SS
-F2RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
-F2PSNR=$(plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
+F2RMSE=$($DIR/plambda -c "$SS sqrt" 2>/dev/null)
+F2PSNR=$($DIR/plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
 echo "F2 - Total RMSE $F2RMSE" >> $OUT/measures
 echo "F2 - Total PSNR $F2PSNR" >> $OUT/measures
 
@@ -99,9 +99,9 @@ if [[ $SPM == "no" ]]; then printf "%f %f\n" $F1MSE $F2MSE; exit 0; fi
 # psnr for multi-scale smoother {{{1
 for i in $(seq $FFR $LFR);
 do
-	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"smo1-%03d.tif" $i) m 0 2>/dev/null)
-	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
-	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
+	MM[$i]=$($DIR/psnr.sh $(printf $SEQ $i) $(printf $OUT/"smo1-%03d.tif" $i) m 0 2>/dev/null)
+	MM[$i]=$($DIR/plambda -c "${MM[$i]} sqrt" 2>/dev/null)
+	PP[$i]=$($DIR/plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
 done
 
 echo "S1 - Frame RMSE " ${MM[*]} >> $OUT/measures
@@ -112,22 +112,22 @@ SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
 do
-	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
+	SS=$($DIR/plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
 	n=$((n+1))
 done
 
 F2MSE=$SS
-F2RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
-F2PSNR=$(plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
+F2RMSE=$($DIR/plambda -c "$SS sqrt" 2>/dev/null)
+F2PSNR=$($DIR/plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
 echo "S1 - Total RMSE $F2RMSE" >> $OUT/measures
 echo "S1 - Total PSNR $F2PSNR" >> $OUT/measures
 
 # psnr for single-scale filter 1 {{{1
 for i in $(seq $FFR $LFR);
 do
-	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"ms0-flt1-%03d.tif" $i) m 0 2>/dev/null)
-	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
-	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
+	MM[$i]=$($DIR/psnr.sh $(printf $SEQ $i) $(printf $OUT/"ms0-flt1-%03d.tif" $i) m 0 2>/dev/null)
+	MM[$i]=$($DIR/plambda -c "${MM[$i]} sqrt" 2>/dev/null)
+	PP[$i]=$($DIR/plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
 done
 
 echo "F1 - Frame RMSE " ${MM[*]}  > $OUT/ss-measures
@@ -138,22 +138,22 @@ SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
 do
-	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
+	SS=$($DIR/plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
 	n=$((n+1))
 done
 
 F1MSE=$SS
-F1RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
-F1PSNR=$(plambda -c "255 $F1RMSE / log10 20 *" 2>/dev/null)
+F1RMSE=$($DIR/plambda -c "$SS sqrt" 2>/dev/null)
+F1PSNR=$($DIR/plambda -c "255 $F1RMSE / log10 20 *" 2>/dev/null)
 echo "F1 - Total RMSE $F1RMSE" >> $OUT/ss-measures
 echo "F1 - Total PSNR $F1PSNR" >> $OUT/ss-measures
 
 # psnr for single-scale filter 2 {{{1
 for i in $(seq $FFR $LFR);
 do
-	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"ms0-flt2-%03d.tif" $i) m 0 2>/dev/null)
-	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
-	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
+	MM[$i]=$($DIR/psnr.sh $(printf $SEQ $i) $(printf $OUT/"ms0-flt2-%03d.tif" $i) m 0 2>/dev/null)
+	MM[$i]=$($DIR/plambda -c "${MM[$i]} sqrt" 2>/dev/null)
+	PP[$i]=$($DIR/plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
 done
 
 echo "F2 - Frame RMSE " ${MM[*]} >> $OUT/ss-measures
@@ -164,22 +164,22 @@ SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
 do
-	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
+	SS=$($DIR/plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
 	n=$((n+1))
 done
 
 F2MSE=$SS
-F2RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
-F2PSNR=$(plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
+F2RMSE=$($DIR/plambda -c "$SS sqrt" 2>/dev/null)
+F2PSNR=$($DIR/plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
 echo "F2 - Total RMSE $F2RMSE" >> $OUT/ss-measures
 echo "F2 - Total PSNR $F2PSNR" >> $OUT/ss-measures
 
 # psnr for single-scale smoother {{{1
 for i in $(seq $FFR $LFR);
 do
-	MM[$i]=$(psnr.sh $(printf $SEQ $i) $(printf $OUT/"ms0-smo1-%03d.tif" $i) m 0 2>/dev/null)
-	MM[$i]=$(plambda -c "${MM[$i]} sqrt" 2>/dev/null)
-	PP[$i]=$(plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
+	MM[$i]=$($DIR/psnr.sh $(printf $SEQ $i) $(printf $OUT/"ms0-smo1-%03d.tif" $i) m 0 2>/dev/null)
+	MM[$i]=$($DIR/plambda -c "${MM[$i]} sqrt" 2>/dev/null)
+	PP[$i]=$($DIR/plambda -c "255 ${MM[$i]} / log10 20 *" 2>/dev/null)
 done
 
 echo "S1 - Frame RMSE " ${MM[*]} >> $OUT/ss-measures
@@ -190,13 +190,13 @@ SS=0
 n=0
 for i in $(seq $((FFR+0)) $LFR);
 do
-	SS=$(plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
+	SS=$($DIR/plambda -c "${MM[$i]} 2 ^ $n $SS * + $((n+1)) /" 2>/dev/null)
 	n=$((n+1))
 done
 
 F2MSE=$SS
-F2RMSE=$(plambda -c "$SS sqrt" 2>/dev/null)
-F2PSNR=$(plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
+F2RMSE=$($DIR/plambda -c "$SS sqrt" 2>/dev/null)
+F2PSNR=$($DIR/plambda -c "255 $F2RMSE / log10 20 *" 2>/dev/null)
 echo "S1 - Total RMSE $F2RMSE" >> $OUT/ss-measures
 echo "S1 - Total PSNR $F2PSNR" >> $OUT/ss-measures
 

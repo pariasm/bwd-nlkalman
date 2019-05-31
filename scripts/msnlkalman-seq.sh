@@ -83,7 +83,7 @@ do
 
 			# backward occlusion masks {{{2
 			if [ ! -f $OCC ]; then
-				plambda $FLW \
+				$DIR/plambda $FLW \
 				  "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.5 > 255 *" \
 				  -o $OCC
 			fi
@@ -149,7 +149,7 @@ do
 
 		# forward occlusion masks {{{2
 		if [ ! -f $OCC ]; then
-			plambda $FLW \
+			$DIR/plambda $FLW \
 			  "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.5 > 255 *" \
 			  -o $OCC
 		fi
