@@ -50,7 +50,7 @@ set_property(SOURCE iio.c PROPERTY COMPILE_FLAGS "-Wno-unused-variable -Wno-unus
 add_library(multiscaler OBJECT iio.c iio.h multiscaler.cpp multiscaler.hpp Image.hpp)
 add_executable(decompose decompose.cpp $<TARGET_OBJECTS:multiscaler>)
 add_executable(recompose recompose.cpp $<TARGET_OBJECTS:multiscaler>)
-add_executable(merge_coarse merge_coarse.cpp $<TARGET_OBJECTS:multiscaler>)
+#add_executable(merge_coarse merge_coarse.cpp $<TARGET_OBJECTS:multiscaler>)
 
 # iio shared object for piio.py
 #set(CMAKE_MACOSX_RPATH 1)

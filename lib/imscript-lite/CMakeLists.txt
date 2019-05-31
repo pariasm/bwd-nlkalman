@@ -43,4 +43,7 @@ target_link_libraries(plambda iio m)
 add_executable(awgn src/awgn.c)
 target_link_libraries(awgn iio m)
 
+add_executable(imprintf src/imprintf.c)
+target_link_libraries(imprintf iio m)
+
 ###############################################################################

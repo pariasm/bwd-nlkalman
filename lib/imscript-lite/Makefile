@@ -2,7 +2,7 @@ CFLAGS ?= -march=native -O3 -DNDEBUG -Wall -Wno-unused
 LDLIBS += -ljpeg -ltiff -lpng -lz -lfftw3f -lm
 
 OBJ = src/iio.o
-BIN = plambda iion awgn
+BIN = plambda iion awgn imprintf
 
 default: $(BIN)
 
