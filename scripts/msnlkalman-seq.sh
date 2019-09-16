@@ -93,6 +93,8 @@ do
 #				--flt10 $F10 --flt11 $F11 --flt20 $F20 --flt21 $F21
 			$NLKF -i $NSY -s $LSIG $FPM -o $FLW -k $OCC \
 				--flt10 $F10 --flt11 $F11 --flt20 $F20 --flt21 $F21
+
+			rm $FLW $OCC
 		else
 			# run filtering {{{2
 #			echo $NLKF -i $NSY -s $LSIG $FPM --flt11 $F11 --flt21 $F21
@@ -116,12 +118,10 @@ if [[ $SPM == "no" ]]; then exit 0; fi
 # last frame
 for l in $(seq $((PYR_LVL-1)) -1 0)
 do
-	cp -sf $(printf      "ms%d-flt2-%03d.tif"  $l $LFR) \
-	       $(printf "$OUT/ms%d-smo1-%03d.tif"  $l $LFR)
-#	cp -srf $(printf "$OUT/ms%d-flt2-%03d.tif"  $l $LFR) \
-#	        $(printf "$OUT/ms%d-smo1-%03d.tif"  $l $LFR)
+	cp $(printf "$OUT/ms%d-flt2-%03d.tif"  $l $LFR) \
+	   $(printf "$OUT/ms%d-smo1-%03d.tif"  $l $LFR)
 done
-cp -sf $(printf "flt2-%03d.tif" $LFR) $(printf "$OUT/smo1-%03d.tif" $LFR)
+cp $(printf "$OUT/flt2-%03d.tif" $LFR) $(printf "$OUT/smo1-%03d.tif" $LFR)
 
 NLKS="$DIR/nlkalman-smo"
 FSCALE=1; DW=0.40; TH=0.75
@@ -156,6 +156,8 @@ do
 
 		# smoothing {{{2
 		$NLKS --flt1 $F1 --smo0 $S0 -o $FLW -k $OCC -s $SIG $SPM --smo1 $S1
+
+		rm $FLW $OCC
 	done
 
 #	MSS1="$OUT/smo1-"$(printf %03.1f-%03d.tif $PYR_REC $i)
