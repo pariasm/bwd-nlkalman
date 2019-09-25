@@ -8,10 +8,10 @@ SIG=$4 # noise standard dev.
 OUT=$5 # output folder
 FPM=${6:-""} # filtering parameters
 SPM=${7:-""} # smoothing parameters
-MPM=${8:-""} # multiscaler parameters
+OPM=${8:-"1 0.25 0.75 1 0.25 0.75"} # optical flow parameters
+MPM=${9:-""} # multiscaler parameters
 
-mkdir -p $OUT/s$SIG
-OUT=$OUT/s$SIG
+mkdir -p $OUT
 
 # we assume that the binaries are in the same folder as the script
 DIR=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
@@ -39,7 +39,7 @@ do
 done
 
 # run denoising script {{{1
-$DIR/msnlkalman-lz3-seq.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT "$FPM" "$SPM" $MPM
+$DIR/msnlkalman-lz3-seq.sh "$OUT/%03d.tif" $FFR $LFR $SIG $OUT "$FPM" "$SPM" "$OPM" $MPM
 
 # psnr for multi-scale filter 1 {{{1
 for i in $(seq $FFR $LFR);

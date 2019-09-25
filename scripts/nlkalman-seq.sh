@@ -85,7 +85,7 @@ do
 #		$TVL1 $(printf $FLT1 $i) \
 #		      $(printf $FLT2 $((i-1))) \
 #		      $F \
-#		      $NPROC 0.25 0.2 $DW2 100 $FSCALE2 0.5 5 0.01 0;
+#		      $NPROC 0.25 0.2 $DW2 100 $FSCALE2 $TH 5 0.01 0;
 #	fi
 #
 #	# update occlusion masks {{{2
@@ -135,7 +135,7 @@ do
 	file=$(printf $OCCL $i)
 	if [ ! -f $file ]; then
 		$DIR/plambda $(printf $FLOW $i) \
-		  "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs 0.5 > 255 *" \
+		  "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs $TH > 255 *" \
 		  -o $file
 	fi
 
