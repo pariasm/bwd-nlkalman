@@ -1,5 +1,8 @@
 configure_file(nlkalman-seq.sh          ${CMAKE_BINARY_DIR}/bin/nlkalman-seq.sh          COPYONLY)
 configure_file(nlkalman-seq-gt.sh       ${CMAKE_BINARY_DIR}/bin/nlkalman-seq-gt.sh       COPYONLY)
+configure_file(nlkalman-lsmo-seq.sh     ${CMAKE_BINARY_DIR}/bin/nlkalman-lsmo-seq.sh     COPYONLY)
+configure_file(nlkalman-fsmo-seq.sh     ${CMAKE_BINARY_DIR}/bin/nlkalman-fsmo-seq.sh     COPYONLY)
+configure_file(nlkalman-fsmo-seq-gt.sh  ${CMAKE_BINARY_DIR}/bin/nlkalman-fsmo-seq-gt.sh  COPYONLY)
 configure_file(msnlkalman-seq.sh        ${CMAKE_BINARY_DIR}/bin/msnlkalman-seq.sh        COPYONLY)
 configure_file(msnlkalman-seq-gt.sh     ${CMAKE_BINARY_DIR}/bin/msnlkalman-seq-gt.sh     COPYONLY)
 configure_file(msnlkalman-lz3-seq.sh    ${CMAKE_BINARY_DIR}/bin/msnlkalman-lz3-seq.sh    COPYONLY)
