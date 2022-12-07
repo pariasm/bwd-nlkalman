@@ -6,9 +6,10 @@ FFR=$2 # first frame
 LFR=$3 # last frame
 SIG=$4 # noise standard dev.
 OUT=$5 # output folder
-FPM=${6:-""} # filtering parameters
-SPM=${7:-""} # smoothing parameters
-OPM=${8:-"1 0.25 0.75 1 0.25 0.75"} # optical flow parameters
+STP=${6:-1}  # frame step
+FPM=${7:-""} # filtering parameters
+SPM=${8:-""} # smoothing parameters
+OPM=${9:-"1 0.25 0.75 1 0.25 0.75"} # optical flow parameters
 
 mkdir -p $OUT
 
@@ -16,7 +17,7 @@ mkdir -p $OUT
 DIR=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 
 # error checking {{{1
-for i in $(seq $FFR $LFR);
+for i in $(seq $FFR $STP $LFR);
 do
 	file=$(printf $SEQ $i)
 	if [ ! -f $file ]
@@ -52,14 +53,14 @@ OFPRMS="$NPROC 0 $DW1 0 0 $FSCALE1";
 FLOW="$OUT/bflo%d-%03d.flo"
 OCCL="$OUT/bocc%d-%03d.png"
 
-for i in $(seq $((FFR+1)) $LFR);
+for i in $(seq $((FFR+$STP)) $STP $LFR);
 do
 
 	# compute backward optical flow {{{2
 	F=$(printf $FLOW 1 $i)
 	if [ ! -f $F ]; then
 		$TVL1 $(printf $SEQ $i) \
-		      $(printf $FLT2 $((i-1))) \
+		      $(printf $FLT2 $((i-$STP))) \
 		      $F $OFPRMS;
 	fi
 
@@ -77,7 +78,7 @@ do
 #	 --flt10 $(printf $FLT1 $((i-1))) --flt11 $(printf $FLT1 $i) \
 #	 --flt20 $(printf $FLT2 $((i-1))) --flt21 $(printf $FLT2 $i)
 	$NLK -i $(printf $SEQ $i) -s $SIG $FPM --f2_p 0 -o $F -k $O \
-	 --flt10 $(printf $FLT1 $((i-1))) --flt11 $(printf $FLT1 $i)
+	 --flt10 $(printf $FLT1 $((i-$STP))) --flt11 $(printf $FLT1 $i)
 
 #	# update backward optical flow {{{2
 #	F=$(printf $FLOW 2 $i)
@@ -98,7 +99,7 @@ do
 
 	$NLK -i $(printf $SEQ $i) -s $SIG $FPM --f1_p 0 -o $F -k $O \
 	 --flt11 $(printf $FLT1 $i) \
-	 --flt20 $(printf $FLT2 $((i-1))) --flt21 $(printf $FLT2 $i)
+	 --flt20 $(printf $FLT2 $((i-$STP))) --flt21 $(printf $FLT2 $i)
 
 done
 
@@ -120,14 +121,14 @@ SMO1="$OUT/smo1-%03d.tif"
 # last frame
 cp $(printf $FLT2 $LFR) $(printf $SMO1 $LFR)
 
-for i in $(seq $((LFR-1)) -1 $FFR)
+for i in $(seq $((LFR-STP)) -$STP $FFR)
 do
 
 	# compute forward optical flow {{{2
 	file=$(printf $FLOW $i)
 	if [ ! -f $file ]; then
 		$TVL1 $(printf $FLT2 $i) \
-		      $(printf $SMO1 $((i+1))) \
+		      $(printf $SMO1 $((i+$STP))) \
 		      $file $OFPRMS;
 	fi
 
@@ -143,7 +144,7 @@ do
 #	echo $NLK --flt1 $(printf $FLT2 $i) --smo0 $(printf $SMO1 $((i+1))) \
 #	 -s $SIG $SPM -o $(printf $FLOW $i) -k $(printf $OCCL $i)\
 #	 --smo1 $(printf $SMO1 $i)
-	$NLK --flt1 $(printf $FLT2 $i) --smo0 $(printf $SMO1 $((i+1))) \
+	$NLK --flt1 $(printf $FLT2 $i) --smo0 $(printf $SMO1 $((i+$STP))) \
 	 -s $SIG $SPM -o $(printf $FLOW $i) -k $(printf $OCCL $i)\
 	 --smo1 $(printf $SMO1 $i)
 
