@@ -1,6 +1,6 @@
 cmake_policy(SET CMP0048 NEW) # avoid annoing warnings
 
-project(nlkalman-bwd VERSION 1.0 LANGUAGES C)
+project(nlkalman-bwd VERSION 1.0)
 message(STATUS "Configuring main project: " ${CMAKE_PROJECT_NAME})
 
 # flags #######################################################################

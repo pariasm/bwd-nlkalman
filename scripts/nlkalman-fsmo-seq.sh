@@ -40,8 +40,8 @@ FSCALE2=${O[3]}; DW2=${O[4]}; TH2=${O[5]};
 OFPRMS="$NPROC 0 $DW1 0 0 $FSCALE1";
 
 # filenames
-FLOW="$OUT/bflo%d-%03d.flo"
-OCCL="$OUT/bocc%d-%03d.png"
+FLOW="$OUT/bflo-%03d.flo"
+OCCL="$OUT/bocc-%03d.png"
 FLT1="$OUT/flt1-%03d.tif"
 FLT2="$OUT/flt2-%03d.tif"
 SMO1="$OUT/smo1-%03d.tif"
@@ -64,7 +64,7 @@ for i in $(seq $((FFR+1)) $LFR);
 do
 
 	# compute backward optical flow {{{2
-	F=$(printf $FLOW 1 $i)
+	F=$(printf $FLOW $i)
 	if [ ! -f $F ]; then
 		$TVL1 $(printf $SEQ $i) \
 		      $(printf $FLT2 $((i-1))) \
@@ -72,7 +72,7 @@ do
 	fi
 
 	# backward occlusion masks {{{2
-	O=$(printf $OCCL 1 $i)
+	O=$(printf $OCCL $i)
 	if [ ! -f $O ]; then
 		$DIR/plambda $F \
 		  "x(0,0)[0] x(-1,0)[0] - x(0,0)[1] x(0,-1)[1] - + fabs $TH1 > 255 *" \
