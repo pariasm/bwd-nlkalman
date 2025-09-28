@@ -22,6 +22,7 @@ COMPILATION
 The code is in C with some BASH helper scripts. Known dependencies are:
 * OpenMP: parallelization [optional, but recommended]
 * libpng, libtiff and libjpeg: image i/o
+* libfftw3-dev: computing the DCT of patches
 * GNU parallel: parallelization in some helper scripts
 
 Compilation was tested on Ubuntu Linux 16.04 and 18.04.

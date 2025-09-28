@@ -37,8 +37,10 @@ if s == 0, R = I;
 else
 	filter = fspecial( 'gaussian', [1,max(floor(s)*2, 5)], s);
 	filter = filter/sum(filter(:));
-	R = imfilter(I, filter , 'symmetric');    % horizontal
-	R = imfilter(R, filter', 'symmetric');    % vertical
+	for c = 1:size(I,3),
+		R(:,:,c) = imfilter(I(:,:,c), filter , 'symmetric');    % horizontal
+		R(:,:,c) = imfilter(R(:,:,c), filter', 'symmetric');    % vertical
+	end
 end
 
 end
